@@ -1,0 +1,40 @@
+{
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": [
+      "/conquerers/*",
+      "/parkplanner/*",
+      "/SingersVoice/*",
+      "/tripplanner/*",
+      "*.css",
+      "*.js",
+      "*.svg",
+      "*.png",
+      "*.jpg",
+      "*.ico",
+      "*.json"
+    ]
+  },
+  "routes": [
+    {
+      "route": "/parkplanner",
+      "redirect": "/parkplanner/",
+      "statusCode": 301
+    },
+    {
+      "route": "/conquerers",
+      "redirect": "/conquerers/",
+      "statusCode": 301
+    },
+    {
+      "route": "/SingersVoice",
+      "redirect": "/SingersVoice/",
+      "statusCode": 301
+    },
+    {
+      "route": "/tripplanner",
+      "redirect": "/tripplanner/",
+      "statusCode": 301
+    }
+  ]
+}
