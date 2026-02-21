@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.DS_Store
+Thumbs.db
+.claude/
+PiggyBanksAI/
+*.log
+.env
+.env.local
+nul

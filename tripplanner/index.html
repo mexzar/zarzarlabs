@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Savings Tracker</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Merriweather:wght@400;700&family=Space+Mono:wght@400;700&family=Nunito:wght@400;600;700&family=Playfair+Display:wght@400;700&family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Savings Tracker</h1>
+      <p class="subtitle">Track your savings goals for any occasion</p>
+      <div class="personalize-bar">
+        <div class="picker-group">
+          <span class="picker-label">Backdrop</span>
+          <div class="backdrop-picker" id="backdrop-picker"></div>
+        </div>
+<div class="picker-group">
+          <span class="picker-label">Font</span>
+          <div class="font-picker" id="font-picker"></div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Account Switcher -->
+    <section class="account-bar">
+      <div class="account-select-group">
+        <label for="account-select">Account:</label>
+        <select id="account-select"></select>
+      </div>
+      <div class="account-actions">
+        <button class="btn btn-small btn-primary" id="new-account-btn">+ New Account</button>
+        <button class="btn btn-small btn-outline" id="rename-account-btn">Rename</button>
+        <button class="btn btn-small btn-delete-account" id="delete-account-btn" title="Delete account">&times;</button>
+      </div>
+    </section>
+
+    <!-- Account Summary -->
+    <section class="account-summary" id="account-summary"></section>
+
+    <section class="new-goal-section">
+      <h2>New Goal</h2>
+      <form id="goal-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="goal-name">Occasion</label>
+            <input type="text" id="goal-name" placeholder="e.g. Summer Vacation" required>
+          </div>
+          <div class="form-group">
+            <label for="goal-target">Target Amount ($)</label>
+            <input type="number" id="goal-target" placeholder="0.00" min="0.01" step="0.01" required>
+          </div>
+          <div class="form-group">
+            <label for="goal-date">Target Date (optional)</label>
+            <input type="date" id="goal-date">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Add Goal</button>
+      </form>
+    </section>
+
+    <section class="goals-section">
+      <h2>Your Goals</h2>
+      <div id="goals-container" class="goals-container">
+        <p class="empty-state">No goals yet. Add one above to get started!</p>
+      </div>
+    </section>
+
+    <section class="data-section">
+      <div class="data-actions">
+        <button class="btn btn-small btn-outline" id="export-btn">Export Data</button>
+        <label class="btn btn-small btn-outline import-label" for="import-file">Import Data</label>
+        <input type="file" id="import-file" accept=".json" hidden>
+      </div>
+    </section>
+  </div>
+
+  <!-- AI Earnings Advisor -->
+  <button class="ai-fab" id="ai-fab" title="AI Earnings Advisor">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2a4 4 0 0 1 4 4v1h1a3 3 0 0 1 3 3v1a3 3 0 0 1-3 3h-1v4a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-4H7a3 3 0 0 1-3-3v-1a3 3 0 0 1 3-3h1V6a4 4 0 0 1 4-4z"/>
+      <circle cx="9.5" cy="10" r="1" fill="currentColor" stroke="none"/>
+      <circle cx="14.5" cy="10" r="1" fill="currentColor" stroke="none"/>
+      <path d="M9.5 15a3 3 0 0 0 5 0"/>
+    </svg>
+    <span class="ai-fab-pulse"></span>
+  </button>
+
+  <div id="ai-panel" class="ai-panel hidden">
+    <div class="ai-panel-header">
+      <div class="ai-header-left">
+        <div class="ai-avatar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a4 4 0 0 1 4 4v1h1a3 3 0 0 1 3 3v1a3 3 0 0 1-3 3h-1v4a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-4H7a3 3 0 0 1-3-3v-1a3 3 0 0 1 3-3h1V6a4 4 0 0 1 4-4z"/>
+            <circle cx="9.5" cy="10" r="1" fill="currentColor" stroke="none"/>
+            <circle cx="14.5" cy="10" r="1" fill="currentColor" stroke="none"/>
+            <path d="M9.5 15a3 3 0 0 0 5 0"/>
+          </svg>
+        </div>
+        <div>
+          <h3>Earnings Advisor</h3>
+          <span class="ai-panel-subtitle">AI-powered savings coach</span>
+        </div>
+      </div>
+      <button class="ai-panel-close" id="ai-panel-close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="ai-panel-body" id="ai-panel-body"></div>
+    <form class="ai-panel-input-area" id="ai-input-form">
+      <input type="text" id="ai-question-input" placeholder="Ask me anything..." autocomplete="off">
+      <button type="submit" class="ai-send-btn" id="ai-ask-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </form>
+  </div>
+
+  <!-- Contribution Modal -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <button class="modal-close" id="modal-close">&times;</button>
+      <h3 id="modal-title">Add Contribution</h3>
+      <form id="contribution-form">
+        <input type="hidden" id="contribution-goal-id">
+        <div class="form-group">
+          <label for="contribution-amount">Amount ($)</label>
+          <input type="number" id="contribution-amount" placeholder="0.00" min="0.01" step="0.01" required>
+        </div>
+        <div class="form-group">
+          <label for="contribution-note">Note (optional)</label>
+          <input type="text" id="contribution-note" placeholder="e.g. Birthday money">
+        </div>
+        <button type="submit" class="btn btn-primary">Add</button>
+      </form>
+
+      <div id="history-section" class="history-section">
+        <h4>History</h4>
+        <ul id="history-list"></ul>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

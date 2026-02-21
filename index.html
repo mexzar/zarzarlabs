@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZarzarLabs</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .tagline {
+            font-size: 1.1rem;
+            color: #888;
+            margin-bottom: 3rem;
+            font-weight: 300;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 1.5rem;
+            max-width: 900px;
+            width: 100%;
+        }
+        .card {
+            background: #161616;
+            border: 1px solid #222;
+            border-radius: 12px;
+            padding: 2rem;
+            text-decoration: none;
+            color: #e0e0e0;
+            transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: #60a5fa;
+            box-shadow: 0 8px 30px rgba(96, 165, 250, 0.1);
+        }
+        .card h2 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .card p {
+            font-size: 0.9rem;
+            color: #888;
+            line-height: 1.5;
+        }
+        .card .arrow {
+            display: inline-block;
+            margin-top: 1rem;
+            color: #60a5fa;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        footer {
+            margin-top: 3rem;
+            font-size: 0.8rem;
+            color: #444;
+        }
+    </style>
+</head>
+<body>
+    <h1>ZarzarLabs</h1>
+    <p class="tagline">Experiments, tools, and games</p>
+    <div class="grid">
+        <a href="/conquerers/" class="card">
+            <h2>Conquerers</h2>
+            <p>A medieval strategy conquest game. Build armies, capture forts, and expand your empire.</p>
+            <span class="arrow">Play &rarr;</span>
+        </a>
+        <a href="/parkplanner/" class="card">
+            <h2>Park Planner</h2>
+            <p>Plan your perfect day at Disney World and Universal Orlando with optimized ride schedules.</p>
+            <span class="arrow">Plan &rarr;</span>
+        </a>
+        <a href="/SingersVoice/" class="card">
+            <h2>Singer's Voice</h2>
+            <p>Practice singing with real-time pitch detection, recording, and Spotify integration.</p>
+            <span class="arrow">Sing &rarr;</span>
+        </a>
+        <a href="/tripplanner/" class="card">
+            <h2>Savings Tracker</h2>
+            <p>Track savings goals, log contributions, and get AI-powered financial advice.</p>
+            <span class="arrow">Track &rarr;</span>
+        </a>
+    </div>
+    <footer>&copy; 2026 ZarzarLabs</footer>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SingersVoice - Singing Practice</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <span class="logo-icon">&#9835;</span>
+      <h1>SingersVoice</h1>
+    </div>
+    <nav>
+      <button class="tab-btn active" data-tab="sing-along">Sing Along</button>
+      <button class="tab-btn" data-tab="free-practice">Free Practice</button>
+      <button class="tab-btn" data-tab="my-recordings">My Recordings</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Sing Along Tab -->
+    <section id="sing-along" class="tab-content active">
+      <div class="sing-along-layout">
+        <!-- Left: Spotify + Controls -->
+        <div class="player-section">
+          <h2>Find a Song</h2>
+          <div class="spotify-input-group">
+            <input type="text" id="spotify-input" placeholder="Search a song or paste a Spotify link..." autocomplete="off" />
+            <button id="spotify-go-btn" class="btn btn-spotify">Go</button>
+          </div>
+          <p id="spotify-hint" class="hint-text">Type a song name to search, or paste a Spotify link to load instantly</p>
+          <div id="spotify-results" class="spotify-results" style="display:none;"></div>
+          <div id="spotify-player-container">
+            <iframe id="spotify-player" style="display:none;" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+            <div class="player-placeholder" id="spotify-placeholder">
+              <span class="placeholder-icon">&#9835;</span>
+              <p>Search for a song or paste a Spotify link above</p>
+            </div>
+          </div>
+          <div class="sing-controls">
+            <button id="sing-record-btn" class="btn btn-record" disabled>
+              <span class="record-dot"></span>
+              Sing &amp; Record
+            </button>
+            <button id="sing-stop-btn" class="btn btn-stop" disabled>Stop</button>
+            <span id="sing-timer" class="timer">00:00</span>
+            <span id="sing-status" class="status-text"></span>
+          </div>
+        </div>
+
+        <!-- Right: Pitch + Lyrics -->
+        <div class="visualization-section">
+          <div class="pitch-panel">
+            <h3>Pitch Monitor</h3>
+            <div class="current-note" id="sing-current-note">--</div>
+            <canvas id="sing-pitch-canvas" width="500" height="200"></canvas>
+          </div>
+          <div class="lyrics-panel">
+            <h3>Lyrics</h3>
+            <textarea id="lyrics-input" placeholder="Paste song lyrics here..."></textarea>
+            <div id="lyrics-display" class="lyrics-scroll" style="display:none;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Free Practice Tab -->
+    <section id="free-practice" class="tab-content">
+      <div class="practice-layout">
+        <div class="practice-controls">
+          <h2>Free Practice</h2>
+          <p class="subtitle">Record yourself and see your pitch in real-time</p>
+          <div class="practice-buttons">
+            <button id="practice-record-btn" class="btn btn-record">
+              <span class="record-dot"></span>
+              Record
+            </button>
+            <button id="practice-stop-btn" class="btn btn-stop" disabled>Stop</button>
+            <span id="practice-timer" class="timer">00:00</span>
+          </div>
+          <div id="practice-playback" class="playback-section" style="display:none;">
+            <h3>Last Recording</h3>
+            <audio id="practice-audio" controls></audio>
+            <div class="playback-actions">
+              <button id="practice-save-btn" class="btn btn-primary">Save Recording</button>
+              <button id="practice-discard-btn" class="btn btn-secondary">Discard</button>
+            </div>
+          </div>
+        </div>
+        <div class="practice-pitch">
+          <h3>Pitch Monitor</h3>
+          <div class="current-note" id="practice-current-note">--</div>
+          <canvas id="practice-pitch-canvas" width="700" height="250"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- My Recordings Tab -->
+    <section id="my-recordings" class="tab-content">
+      <div class="recordings-header">
+        <h2>My Recordings</h2>
+        <span id="recording-count" class="badge">0</span>
+      </div>
+      <div id="recordings-list" class="recordings-list">
+        <div class="empty-state">
+          <span class="empty-icon">&#127908;</span>
+          <p>No recordings yet. Start singing to create your first recording!</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Save Recording Modal -->
+  <div id="save-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h3>Save Recording</h3>
+      <label for="recording-title">Title</label>
+      <input type="text" id="recording-title" placeholder="My awesome performance..." />
+      <div class="modal-actions">
+        <button id="modal-save-btn" class="btn btn-primary">Save</button>
+        <button id="modal-cancel-btn" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/storage.js"></script>
+  <script src="js/pitch.js"></script>
+  <script src="js/spotify.js"></script>
+  <script src="js/lyrics.js"></script>
+  <script src="js/recorder.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
