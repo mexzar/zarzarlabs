@@ -6232,6 +6232,66 @@ function settTryMove(dx, dy) {
   if (sett.turnCount % 50 === 0 && sett.turnCount > 0) settSaveGame(0);
 }
 
+// --- SETTLERS HARVESTING ---
+function settGetToolBonus() {
+  const smithy = sett.buildings.find(b => b.type === 'blacksmith' && b.built && !b.upgrading && b.workers > 0);
+  if (!smithy) return 0;
+  const smithEff = Math.min(1, smithy.workers / SETT_BUILDING_DEFS.blacksmith.workers);
+  return Math.floor(SETT_BUILDING_DEFS.blacksmith.levels[smithy.level].toolBonus * smithEff);
+}
+
+function settHarvest() {
+  if (isAnimating) return;
+  const px = player.x, py = player.y;
+  const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
+  let harvested = false;
+  const bonus = settGetToolBonus();
+
+  for (const [dx, dy] of dirs) {
+    const tx = px + dx, ty = py + dy;
+    if (ty < 0 || tx < 0) continue;
+    // Chop tree
+    if (treeMap[ty] && treeMap[ty][tx]) {
+      treeMap[ty][tx] = false;
+      const woodGain = 3 + bonus;
+      sett.resources.wood = Math.min(sett.storageCap.wood, sett.resources.wood + woodGain);
+      spawnFloatingText(tx, ty, '+' + woodGain + ' Wood', '#8d6e63');
+      harvested = true;
+      continue;
+    }
+    // Mine rock
+    if (walls.has(k(tx, ty))) {
+      walls.delete(k(tx, ty));
+      const stoneGain = 2 + bonus;
+      sett.resources.stone = Math.min(sett.storageCap.stone, sett.resources.stone + stoneGain);
+      spawnFloatingText(tx, ty, '+' + stoneGain + ' Stone', '#90a4ae');
+      // Small chance for iron
+      if (Math.random() < 0.3) {
+        const ironGain = 1 + Math.floor(bonus / 2);
+        sett.resources.iron = Math.min(sett.storageCap.iron, sett.resources.iron + ironGain);
+        spawnFloatingText(tx, ty, '+' + ironGain + ' Iron', '#78909c');
+      }
+      harvested = true;
+      continue;
+    }
+  }
+
+  if (!harvested) {
+    settNotify('Nothing to harvest nearby', '#ffb74d');
+    return;
+  }
+
+  sett.turnCount++;
+  settResourceTick();
+  settAdvanceConstruction();
+  settAdvanceResearch();
+  settPopulationGrowth();
+  settDimFog();
+  settUpdateHUD();
+  minimapDirty = true;
+  if (sett.turnCount % 50 === 0 && sett.turnCount > 0) settSaveGame(0);
+}
+
 // --- SETTLERS UI ---
 function settUpdateHUD() {
   document.getElementById('hud').style.display = 'none';
@@ -6269,6 +6329,7 @@ function settUpdateControls() {
   controls.innerHTML = '';
   const btn = (text, onclick) => { const b = document.createElement('button'); b.textContent = text; b.onclick = onclick; controls.appendChild(b); };
   btn('Build (B)', () => settToggleBuildMenu());
+  btn('Harvest (H)', () => settHarvest());
   btn('Settlement', () => settShowSettlementInfo());
   btn('Research', () => settShowResearchMenu());
   btn('Save/Load', () => settShowSaveLoadUI());
@@ -7531,6 +7592,7 @@ document.addEventListener('keydown', e => {
         case 'ArrowRight': case 'd': case 'D': e.preventDefault(); settTryMove(1, 0); break;
         case 'Escape': if (sett.buildMode) { sett.buildMode = false; sett.buildSelected = null; msg(''); } break;
         case 'b': case 'B': settToggleBuildMenu(); break;
+        case 'h': case 'H': settHarvest(); break;
       }
     } else if (gameMode === 'battle') {
       if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); battle.simPaused = !battle.simPaused; }
