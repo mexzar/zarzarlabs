@@ -121,6 +121,9 @@ canvas {
   <span id="income-num"><span class="label">Income </span><span class="val" id="incomeVal" style="color:#ffd54f">none</span></span>
 </div>
 
+<div id="sett-hud" style="display:none;gap:6px;margin-bottom:4px;font-size:0.85rem;flex-wrap:wrap;justify-content:center;">
+</div>
+
 <div id="message">&nbsp;</div>
 
 <canvas id="game"></canvas>
@@ -317,6 +320,8 @@ let playerVisual = { x: 1, y: 1 }; // rendered position (float)
 //  GAME MODE & TACTICAL BATTLE STATE
 // ═══════════════════════════════════════════
 let gameMode = 'overworld'; // 'overworld' | 'deploy' | 'battle' | 'battle_result'
+let appMode = 'conquerers'; // 'conquerers' | 'settlers'
+let sett = null; // settlers mode state (null when in conquerers mode)
 
 const BATTLE_STATS = {
   riflemen:   { hp: 8,  atk: 3,  range: 3, moveRange: 3, aoe: 0, name: 'Rifleman', moveSpeed: 0.03, attackRate: 45 },
@@ -5571,13 +5576,1756 @@ function drawBattleResultPanel() {
 }
 
 // ═══════════════════════════════════════════
+//  SETTLERS MODE - COMPLETE IMPLEMENTATION
+// ═══════════════════════════════════════════
+
+// --- SETTLERS CONSTANTS ---
+const SETT_RESOURCES = ['wood', 'stone', 'iron', 'gold', 'meat', 'crops'];
+const SETT_RESOURCE_DEFS = {
+  wood:  { name: 'Wood',  color: '#8d6e63', icon: 'W' },
+  stone: { name: 'Stone', color: '#90a4ae', icon: 'S' },
+  iron:  { name: 'Iron',  color: '#78909c', icon: 'I' },
+  gold:  { name: 'Gold',  color: '#ffd54f', icon: 'G' },
+  meat:  { name: 'Meat',  color: '#ef5350', icon: 'M' },
+  crops: { name: 'Crops', color: '#66bb6a', icon: 'C' },
+};
+
+const SETT_CHUNK_SIZE = 16;
+const SETT_MAX_CHUNKS = 16;
+
+// Building definitions with 3 upgrade levels
+const SETT_BUILDING_DEFS = {
+  house: {
+    name: 'House', category: 'infrastructure', workers: 0, requiresAdj: null,
+    levels: [
+      { cost: { wood: 10, stone: 5 }, buildTime: 3, popCap: 4 },
+      { cost: { wood: 15, stone: 10 }, buildTime: 5, popCap: 6 },
+      { cost: { wood: 25, stone: 15, iron: 5 }, buildTime: 7, popCap: 8 },
+    ]
+  },
+  farm: {
+    name: 'Farm', category: 'production', workers: 2, requiresAdj: null,
+    levels: [
+      { cost: { wood: 8, stone: 2 }, buildTime: 4, production: { crops: 3 } },
+      { cost: { wood: 12, stone: 5 }, buildTime: 6, production: { crops: 5 } },
+      { cost: { wood: 20, stone: 8, iron: 3 }, buildTime: 8, production: { crops: 8 } },
+    ]
+  },
+  lumbermill: {
+    name: 'Lumbermill', category: 'production', workers: 2, requiresAdj: 'tree',
+    levels: [
+      { cost: { wood: 5, stone: 8 }, buildTime: 5, production: { wood: 3 } },
+      { cost: { wood: 10, stone: 12 }, buildTime: 7, production: { wood: 5 } },
+      { cost: { wood: 15, stone: 18, iron: 5 }, buildTime: 9, production: { wood: 8 } },
+    ]
+  },
+  quarry: {
+    name: 'Quarry', category: 'production', workers: 3, requiresAdj: 'wall',
+    levels: [
+      { cost: { wood: 10, iron: 2 }, buildTime: 6, production: { stone: 3 } },
+      { cost: { wood: 15, iron: 5 }, buildTime: 8, production: { stone: 5 } },
+      { cost: { wood: 25, iron: 10 }, buildTime: 10, production: { stone: 8 } },
+    ]
+  },
+  mine: {
+    name: 'Mine', category: 'production', workers: 3, requiresAdj: 'wall',
+    levels: [
+      { cost: { wood: 12, stone: 10 }, buildTime: 8, production: { iron: 2 } },
+      { cost: { wood: 20, stone: 15 }, buildTime: 10, production: { iron: 4 } },
+      { cost: { wood: 30, stone: 20, gold: 5 }, buildTime: 12, production: { iron: 6 } },
+    ]
+  },
+  huntingLodge: {
+    name: 'Hunting Lodge', category: 'production', workers: 2, requiresAdj: 'tree',
+    levels: [
+      { cost: { wood: 12, stone: 3 }, buildTime: 4, production: { meat: 2 } },
+      { cost: { wood: 18, stone: 6 }, buildTime: 6, production: { meat: 4 } },
+      { cost: { wood: 25, stone: 10, iron: 3 }, buildTime: 8, production: { meat: 6 } },
+    ]
+  },
+  barracks: {
+    name: 'Barracks', category: 'military', workers: 1, requiresAdj: null,
+    levels: [
+      { cost: { wood: 20, stone: 15, iron: 5 }, buildTime: 8, trainSpeed: 1 },
+      { cost: { wood: 30, stone: 20, iron: 10 }, buildTime: 10, trainSpeed: 1.5 },
+      { cost: { wood: 45, stone: 30, iron: 20 }, buildTime: 12, trainSpeed: 2 },
+    ]
+  },
+  wall_seg: {
+    name: 'Wall', category: 'defense', workers: 0, requiresAdj: null,
+    levels: [
+      { cost: { stone: 5 }, buildTime: 2, hp: 10, defense: 2 },
+      { cost: { stone: 10, iron: 3 }, buildTime: 3, hp: 20, defense: 5 },
+      { cost: { stone: 15, iron: 8 }, buildTime: 4, hp: 35, defense: 10 },
+    ]
+  },
+  watchtower: {
+    name: 'Watchtower', category: 'defense', workers: 1, requiresAdj: null,
+    levels: [
+      { cost: { wood: 15, stone: 10 }, buildTime: 5, visionRange: 4 },
+      { cost: { wood: 20, stone: 15, iron: 5 }, buildTime: 7, visionRange: 6 },
+      { cost: { wood: 30, stone: 20, iron: 10 }, buildTime: 9, visionRange: 8 },
+    ]
+  },
+  market: {
+    name: 'Market', category: 'economy', workers: 2, requiresAdj: null,
+    levels: [
+      { cost: { wood: 15, stone: 10, gold: 10 }, buildTime: 6, production: { gold: 2 }, tradeRatio: 4 },
+      { cost: { wood: 25, stone: 15, gold: 20 }, buildTime: 8, production: { gold: 4 }, tradeRatio: 3 },
+      { cost: { wood: 40, stone: 25, gold: 35 }, buildTime: 10, production: { gold: 6 }, tradeRatio: 2 },
+    ]
+  },
+  blacksmith: {
+    name: 'Blacksmith', category: 'military', workers: 2, requiresAdj: null,
+    levels: [
+      { cost: { wood: 10, stone: 12, iron: 8 }, buildTime: 7, atkBonus: 1, armorBonus: 0 },
+      { cost: { wood: 20, stone: 20, iron: 15 }, buildTime: 9, atkBonus: 2, armorBonus: 1 },
+      { cost: { wood: 35, stone: 30, iron: 25 }, buildTime: 11, atkBonus: 3, armorBonus: 2 },
+    ]
+  },
+  warehouse: {
+    name: 'Warehouse', category: 'infrastructure', workers: 0, requiresAdj: null,
+    levels: [
+      { cost: { wood: 20, stone: 15 }, buildTime: 5, storageCap: 50 },
+      { cost: { wood: 30, stone: 20, iron: 5 }, buildTime: 7, storageCap: 100 },
+      { cost: { wood: 45, stone: 30, iron: 10 }, buildTime: 9, storageCap: 200 },
+    ]
+  },
+  hospital: {
+    name: 'Hospital', category: 'infrastructure', workers: 2, requiresAdj: null,
+    levels: [
+      { cost: { wood: 15, stone: 10, crops: 5 }, buildTime: 6, healRate: 2 },
+      { cost: { wood: 25, stone: 15, crops: 10 }, buildTime: 8, healRate: 4 },
+      { cost: { wood: 40, stone: 25, crops: 15, iron: 5 }, buildTime: 10, healRate: 8 },
+    ]
+  },
+  academy: {
+    name: 'Academy', category: 'infrastructure', workers: 3, requiresAdj: null,
+    levels: [
+      { cost: { wood: 20, stone: 20, gold: 15 }, buildTime: 10, researchSpeed: 1 },
+      { cost: { wood: 35, stone: 30, gold: 25 }, buildTime: 12, researchSpeed: 1.5 },
+      { cost: { wood: 50, stone: 40, gold: 40, iron: 10 }, buildTime: 14, researchSpeed: 2 },
+    ]
+  },
+  temple: {
+    name: 'Temple', category: 'infrastructure', workers: 1, requiresAdj: null,
+    levels: [
+      { cost: { stone: 25, gold: 10 }, buildTime: 8, moraleBonus: 1 },
+      { cost: { stone: 35, gold: 20 }, buildTime: 10, moraleBonus: 2 },
+      { cost: { stone: 50, gold: 35, iron: 5 }, buildTime: 12, moraleBonus: 3 },
+    ]
+  },
+  port: {
+    name: 'Port', category: 'production', workers: 2, requiresAdj: 'water',
+    levels: [
+      { cost: { wood: 20, stone: 8 }, buildTime: 6, production: { meat: 3 } },
+      { cost: { wood: 30, stone: 15, iron: 5 }, buildTime: 8, production: { meat: 5 } },
+      { cost: { wood: 45, stone: 25, iron: 10 }, buildTime: 10, production: { meat: 8 } },
+    ]
+  },
+};
+
+// Tech tree
+const SETT_TECH_TREE = {
+  improvedTools:   { name: 'Improved Tools',   cost: { gold: 20, iron: 10 },  time: 15, effect: 'production_boost', value: 0.25, requires: [] },
+  stoneMasonry:    { name: 'Stone Masonry',     cost: { gold: 15, stone: 15 }, time: 12, effect: 'wall_hp_boost', value: 2, requires: [] },
+  ironWorking:     { name: 'Iron Working',      cost: { gold: 25, iron: 15 },  time: 20, effect: 'unlock_blacksmith', requires: [] },
+  advancedFarming: { name: 'Advanced Farming',  cost: { gold: 20, crops: 10 }, time: 15, effect: 'farm_boost', value: 2, requires: ['improvedTools'] },
+  militaryTactics: { name: 'Military Tactics',  cost: { gold: 30, iron: 10 },  time: 25, effect: 'unit_atk_boost', value: 1, requires: ['ironWorking'] },
+  fortification:   { name: 'Fortification',     cost: { gold: 25, stone: 20 }, time: 20, effect: 'wall_def_boost', value: 3, requires: ['stoneMasonry'] },
+  economics:       { name: 'Economics',         cost: { gold: 35 },            time: 20, effect: 'market_boost', value: 1, requires: [] },
+  medicine:        { name: 'Medicine',          cost: { gold: 30, crops: 15 }, time: 18, effect: 'heal_boost', value: 2, requires: ['advancedFarming'] },
+};
+
+// Military units
+const SETT_UNIT_TYPES = {
+  militia:  { name: 'Militia',  cost: { gold: 5, wood: 5 },           trainTime: 3, str: 3,  hp: 8,  color: '#8d6e63', requires: null },
+  spearman: { name: 'Spearman', cost: { gold: 8, iron: 3 },           trainTime: 4, str: 5,  hp: 12, color: '#5c6bc0', requires: null },
+  archer:   { name: 'Archer',   cost: { gold: 10, wood: 5 },          trainTime: 5, str: 4,  hp: 6,  color: '#26a69a', requires: null },
+  knight:   { name: 'Knight',   cost: { gold: 20, iron: 10 },         trainTime: 8, str: 10, hp: 20, color: '#546e7a', requires: 'militaryTactics' },
+  catapult: { name: 'Catapult',  cost: { gold: 25, wood: 15, iron: 5 },trainTime: 10,str: 15, hp: 8,  color: '#ef6c00', requires: 'fortification' },
+};
+
+// Settlers raid enemy types (medieval themed)
+const SETT_ENEMY_TYPES = {
+  raider:   { name: 'Raider',   strMul: 0.8, color: '#b71c1c', yields: 'militia' },
+  bandit:   { name: 'Bandit',   strMul: 1.2, color: '#4e342e', yields: 'spearman' },
+  warlord:  { name: 'Warlord',  strMul: 2.0, color: '#311b92', yields: 'knight' },
+};
+
+// --- SETTLERS NOISE FUNCTION ---
+function settNoise(x, y) {
+  let n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+  return n - Math.floor(n);
+}
+
+// --- SETTLERS CHUNK SYSTEM ---
+function settGetChunkKey(cx, cy) { return cx + ',' + cy; }
+
+function settEnsureChunk(cx, cy) {
+  const ckey = settGetChunkKey(cx, cy);
+  if (sett.chunks[ckey]) return;
+  const baseX = cx * SETT_CHUNK_SIZE;
+  const baseY = cy * SETT_CHUNK_SIZE;
+  for (let y = baseY; y < baseY + SETT_CHUNK_SIZE; y++) {
+    if (!grassMap[y]) grassMap[y] = [];
+    if (!treeMap[y]) treeMap[y] = [];
+    if (!waterMap[y]) waterMap[y] = [];
+    if (!pathMap[y]) pathMap[y] = [];
+    if (!fogMap[y]) fogMap[y] = [];
+    if (!territoryMap[y]) territoryMap[y] = [];
+    for (let x = baseX; x < baseX + SETT_CHUNK_SIZE; x++) {
+      const seed = settNoise(x, y);
+      grassMap[y][x] = seed;
+      treeMap[y][x] = seed > 0.55 && seed < 0.8;
+      waterMap[y][x] = seed > 0.93;
+      fogMap[y][x] = 0;
+      pathMap[y][x] = false;
+      territoryMap[y][x] = null;
+      // Walls (rocks) for quarry/mine adjacency
+      if (seed > 0.88 && seed <= 0.93) walls.add(k(baseX + (x - baseX), y));
+    }
+  }
+  // Place enemies in outer chunks (farther from center = more)
+  const distFromCenter = Math.abs(cx - Math.floor(sett.mapCenterX / SETT_CHUNK_SIZE)) + Math.abs(cy - Math.floor(sett.mapCenterY / SETT_CHUNK_SIZE));
+  if (distFromCenter >= 2) {
+    const numEnemies = randInt(0, Math.min(3, distFromCenter - 1));
+    for (let i = 0; i < numEnemies; i++) {
+      const ex = baseX + randInt(2, SETT_CHUNK_SIZE - 3);
+      const ey = baseY + randInt(2, SETT_CHUNK_SIZE - 3);
+      if (!walls.has(k(ex, ey)) && !(waterMap[ey] && waterMap[ey][ex])) {
+        const str = 5 + distFromCenter * 4 + randInt(0, distFromCenter * 3);
+        const types = Object.keys(SETT_ENEMY_TYPES);
+        const etype = distFromCenter >= 4 ? types[randInt(0, 2)] : types[randInt(0, 1)];
+        enemies.push({ x: ex, y: ey, str, type: etype, vx: ex, vy: ey, arrowCooldown: 0, patrol: 0, charged: false });
+      }
+    }
+  }
+  sett.chunks[ckey] = { generated: true, cx, cy };
+}
+
+function settExpandMapIfNeeded(px, py) {
+  const cx = Math.floor(px / SETT_CHUNK_SIZE);
+  const cy = Math.floor(py / SETT_CHUNK_SIZE);
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const ncx = cx + dx, ncy = cy + dy;
+      if (ncx >= 0 && ncy >= 0 && ncx < SETT_MAX_CHUNKS && ncy < SETT_MAX_CHUNKS) {
+        settEnsureChunk(ncx, ncy);
+      }
+    }
+  }
+}
+
+// --- SETTLERS INIT ---
+function startSettlersMode() {
+  document.getElementById('overlay').classList.remove('show');
+  showOverlay('SETTLERS', 'Name your settlement, commander.', 'Begin', () => {
+    appMode = 'settlers';
+    sett = {
+      resources: { wood: 30, stone: 20, iron: 0, gold: 10, meat: 5, crops: 10 },
+      storageCap: { wood: 100, stone: 100, iron: 50, gold: 200, meat: 50, crops: 80 },
+      population: 5,
+      popCap: 10,
+      idleWorkers: 3,
+      buildings: [],
+      nextBuildingId: 1,
+      units: [],
+      nextUnitId: 1,
+      researched: {},
+      currentResearch: null,
+      chunks: {},
+      mapCenterX: 50, mapCenterY: 50,
+      raidTimer: 0,
+      raidDifficulty: 1,
+      turnCount: 0,
+      settlementName: playerName || 'New Settlement',
+      morale: 5,
+      notifications: [],
+      buildMode: false,
+      buildSelected: null,
+      buildGhost: null,
+      camX: 50, camY: 50,
+      training: [], // [{unitType, barracksId, progress, target}]
+    };
+    // Init map arrays fresh
+    grassMap = []; treeMap = []; waterMap = []; pathMap = []; fogMap = []; territoryMap = [];
+    walls = new Set();
+    enemies = [];
+    forts = [];
+    allies = [];
+    chests = [];
+    mercCamps = [];
+    overworldEngineers = [];
+    playerForts = [];
+    // Generate initial 3x3 chunks
+    const ccx = Math.floor(sett.mapCenterX / SETT_CHUNK_SIZE);
+    const ccy = Math.floor(sett.mapCenterY / SETT_CHUNK_SIZE);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        settEnsureChunk(ccx + dx, ccy + dy);
+      }
+    }
+    // Clear area around settlement center
+    const cx = sett.mapCenterX, cy = sett.mapCenterY;
+    for (let dy2 = -4; dy2 <= 4; dy2++) {
+      for (let dx2 = -4; dx2 <= 4; dx2++) {
+        const nx = cx + dx2, ny = cy + dy2;
+        if (grassMap[ny]) {
+          treeMap[ny][nx] = false;
+          waterMap[ny][nx] = false;
+          walls.delete(k(nx, ny));
+        }
+      }
+    }
+    // Place starting buildings (already built)
+    const startHouse = settCreateBuilding('house', cx, cy - 1);
+    startHouse.built = true; startHouse.buildProgress = startHouse.buildTarget; startHouse.hp = 10; startHouse.level = 1;
+    const startFarm = settCreateBuilding('farm', cx + 2, cy);
+    startFarm.built = true; startFarm.buildProgress = startFarm.buildTarget; startFarm.hp = 10; startFarm.level = 1;
+    startFarm.workers = 2;
+    sett.idleWorkers = 3; // 5 pop - 2 workers
+    // Init player
+    player = { x: cx, y: cy, army: newArmy(), lastDx: 1, lastDy: 0 };
+    playerVisual = { x: cx, y: cy };
+    sett.camX = cx; sett.camY = cy;
+    camX = cx; camY = cy;
+    // Reveal fog
+    settRevealAround(cx, cy, 6);
+    // Particles and state reset
+    particles = []; floatingTexts = []; ambientParticles = [];
+    moveQueue = []; isAnimating = false;
+    followerTrail = []; followerVisuals = [];
+    settRecalcTerritory();
+    gameMode = 'overworld';
+    settUpdateHUD();
+    settUpdateControls();
+    minimapDirty = true;
+    msg('Welcome to ' + sett.settlementName + '! Press B to build.');
+  }, true);
+}
+
+// --- SETTLERS BUILDING CORE ---
+function settCreateBuilding(type, gx, gy) {
+  const def = SETT_BUILDING_DEFS[type];
+  const lv = def.levels[0];
+  const b = {
+    id: sett.nextBuildingId++,
+    type, gx, gy,
+    level: 0, // 0 = building level 1 when built
+    workers: 0,
+    built: false,
+    buildProgress: 0,
+    buildTarget: lv.buildTime,
+    upgrading: false,
+    hp: 0,
+    maxHp: type === 'wall_seg' ? (lv.hp || 10) : 10,
+  };
+  sett.buildings.push(b);
+  return b;
+}
+
+function settCanBuild(type, gx, gy) {
+  const def = SETT_BUILDING_DEFS[type];
+  if (!def) return false;
+  const lv = def.levels[0];
+  for (const [res, amt] of Object.entries(lv.cost)) {
+    if ((sett.resources[res] || 0) < amt) return false;
+  }
+  if (walls.has(k(gx, gy))) return false;
+  if (waterMap[gy] && waterMap[gy][gx]) return false;
+  if (sett.buildings.some(b => b.gx === gx && b.gy === gy)) return false;
+  if (def.requiresAdj) {
+    const hasAdj = [[-1,0],[1,0],[0,-1],[0,1]].some(([ddx,ddy]) => {
+      const nx = gx+ddx, ny = gy+ddy;
+      if (def.requiresAdj === 'tree') return treeMap[ny] && treeMap[ny][nx];
+      if (def.requiresAdj === 'water') return waterMap[ny] && waterMap[ny][nx];
+      if (def.requiresAdj === 'wall') return walls.has(k(nx, ny));
+      return false;
+    });
+    if (!hasAdj) return false;
+  }
+  return true;
+}
+
+function settPlaceBuilding(type, gx, gy) {
+  const def = SETT_BUILDING_DEFS[type];
+  const lv = def.levels[0];
+  for (const [res, amt] of Object.entries(lv.cost)) sett.resources[res] -= amt;
+  const b = settCreateBuilding(type, gx, gy);
+  spawnFloatingText(gx, gy, 'Building ' + def.name, '#ffd54f');
+  return b;
+}
+
+function settCanUpgrade(buildingId) {
+  const b = sett.buildings.find(b2 => b2.id === buildingId);
+  if (!b || !b.built || b.upgrading) return false;
+  const def = SETT_BUILDING_DEFS[b.type];
+  if (b.level >= def.levels.length - 1) return false;
+  const nextLv = def.levels[b.level + 1];
+  for (const [res, amt] of Object.entries(nextLv.cost)) {
+    if ((sett.resources[res] || 0) < amt) return false;
+  }
+  return true;
+}
+
+function settUpgradeBuilding(buildingId) {
+  const b = sett.buildings.find(b2 => b2.id === buildingId);
+  if (!settCanUpgrade(buildingId)) return;
+  const def = SETT_BUILDING_DEFS[b.type];
+  const nextLv = def.levels[b.level + 1];
+  for (const [res, amt] of Object.entries(nextLv.cost)) sett.resources[res] -= amt;
+  b.upgrading = true;
+  b.buildProgress = 0;
+  b.buildTarget = nextLv.buildTime;
+  spawnFloatingText(b.gx, b.gy, 'Upgrading to Lv' + (b.level + 2), '#ffa726');
+}
+
+function settAdvanceConstruction() {
+  for (const b of sett.buildings) {
+    if (b.built && !b.upgrading) continue;
+    b.buildProgress++;
+    if (b.buildProgress >= b.buildTarget) {
+      if (b.upgrading) {
+        b.level++;
+        b.upgrading = false;
+        const def = SETT_BUILDING_DEFS[b.type];
+        const lv = def.levels[b.level];
+        if (lv.hp) b.maxHp = lv.hp;
+        b.hp = b.maxHp;
+        settApplyBuildingEffects();
+        spawnFloatingText(b.gx, b.gy, def.name + ' Lv' + (b.level + 1) + '!', '#4caf50');
+      } else {
+        b.built = true;
+        b.level = 0;
+        b.hp = b.maxHp;
+        const def = SETT_BUILDING_DEFS[b.type];
+        settApplyBuildingEffects();
+        spawnFloatingText(b.gx, b.gy, def.name + ' Complete!', '#4caf50');
+        settNotify(def.name + ' completed!', '#4caf50');
+      }
+      settRecalcTerritory();
+    }
+  }
+}
+
+function settApplyBuildingEffects() {
+  // Recalc pop cap, storage cap, morale from all buildings
+  let totalPopCap = 0;
+  let extraStorage = 0;
+  let totalMorale = 5; // base morale
+  for (const b of sett.buildings) {
+    if (!b.built) continue;
+    const def = SETT_BUILDING_DEFS[b.type];
+    const lv = def.levels[b.level];
+    if (lv.popCap) totalPopCap += lv.popCap;
+    if (lv.storageCap) extraStorage += lv.storageCap;
+    if (lv.moraleBonus) totalMorale += lv.moraleBonus;
+  }
+  sett.popCap = totalPopCap;
+  for (const res of SETT_RESOURCES) {
+    const base = res === 'gold' ? 200 : (res === 'iron' ? 50 : (res === 'meat' || res === 'crops' ? 80 : 100));
+    sett.storageCap[res] = base + extraStorage;
+  }
+  sett.morale = Math.min(10, totalMorale);
+}
+
+function settDemolish(buildingId) {
+  const idx = sett.buildings.findIndex(b => b.id === buildingId);
+  if (idx === -1) return;
+  const b = sett.buildings[idx];
+  // Refund 50% of level 1 cost
+  const def = SETT_BUILDING_DEFS[b.type];
+  const lv = def.levels[0];
+  for (const [res, amt] of Object.entries(lv.cost)) {
+    sett.resources[res] = Math.min(sett.storageCap[res], sett.resources[res] + Math.floor(amt / 2));
+  }
+  // Unassign workers
+  sett.idleWorkers += b.workers;
+  sett.buildings.splice(idx, 1);
+  settApplyBuildingEffects();
+  settRecalcTerritory();
+  document.getElementById('overlay').classList.remove('show');
+  spawnFloatingText(b.gx, b.gy, 'Demolished', '#f44336');
+}
+
+// --- SETTLERS RESOURCE SYSTEM ---
+function settResourceTick() {
+  const techBoost = sett.researched.improvedTools ? 1.25 : 1;
+  for (const b of sett.buildings) {
+    if (!b.built || b.upgrading) continue;
+    const def = SETT_BUILDING_DEFS[b.type];
+    const lv = def.levels[b.level];
+    if (!lv.production || b.workers === 0) continue;
+    const efficiency = Math.min(1, b.workers / def.workers);
+    for (const [res, rate] of Object.entries(lv.production)) {
+      let produced = Math.floor(rate * efficiency * techBoost);
+      if (res === 'crops' && sett.researched.advancedFarming) produced += 2;
+      if (res === 'gold' && sett.researched.economics) produced += 1;
+      sett.resources[res] = Math.min(sett.storageCap[res], sett.resources[res] + produced);
+    }
+  }
+  // Food consumption
+  const foodNeeded = Math.ceil(sett.population / 2);
+  let consumed = 0;
+  const cropsUsed = Math.min(sett.resources.crops, foodNeeded);
+  sett.resources.crops -= cropsUsed;
+  consumed += cropsUsed;
+  if (consumed < foodNeeded) {
+    const meatUsed = Math.min(sett.resources.meat, foodNeeded - consumed);
+    sett.resources.meat -= meatUsed;
+    consumed += meatUsed;
+  }
+  if (consumed < foodNeeded) {
+    sett.morale = Math.max(0, sett.morale - 1);
+    if (sett.morale === 0 && Math.random() < 0.3) {
+      sett.population = Math.max(1, sett.population - 1);
+      settRecalcWorkers();
+      settNotify('A villager has starved!', '#f44336');
+    }
+  }
+}
+
+// --- SETTLERS POPULATION ---
+function settPopulationGrowth() {
+  if (sett.turnCount % 10 !== 0) return;
+  const foodProduced = settCalcFoodProduction();
+  const foodNeeded = Math.ceil(sett.population / 2);
+  if (foodProduced > foodNeeded && sett.population < sett.popCap && sett.morale >= 3) {
+    sett.population++;
+    sett.idleWorkers++;
+    settNotify('Population grew to ' + sett.population + '!', '#4caf50');
+  }
+}
+
+function settCalcFoodProduction() {
+  let total = 0;
+  const techBoost = sett.researched.improvedTools ? 1.25 : 1;
+  for (const b of sett.buildings) {
+    if (!b.built || b.upgrading || b.workers === 0) continue;
+    const def = SETT_BUILDING_DEFS[b.type];
+    const lv = def.levels[b.level];
+    if (!lv.production) continue;
+    const eff = Math.min(1, b.workers / def.workers);
+    if (lv.production.crops) total += Math.floor(lv.production.crops * eff * techBoost);
+    if (lv.production.meat) total += Math.floor(lv.production.meat * eff * techBoost);
+  }
+  return total;
+}
+
+function settAssignWorker(buildingId) {
+  const b = sett.buildings.find(b2 => b2.id === buildingId);
+  if (!b || !b.built) return;
+  const def = SETT_BUILDING_DEFS[b.type];
+  if (b.workers >= def.workers || sett.idleWorkers <= 0) return;
+  b.workers++;
+  sett.idleWorkers--;
+}
+
+function settUnassignWorker(buildingId) {
+  const b = sett.buildings.find(b2 => b2.id === buildingId);
+  if (!b || b.workers <= 0) return;
+  b.workers--;
+  sett.idleWorkers++;
+}
+
+function settRecalcWorkers() {
+  let totalAssigned = 0;
+  for (const b of sett.buildings) totalAssigned += b.workers;
+  while (totalAssigned > sett.population) {
+    const lb = [...sett.buildings].reverse().find(b => b.workers > 0);
+    if (!lb) break;
+    lb.workers--;
+    totalAssigned--;
+  }
+  sett.idleWorkers = Math.max(0, sett.population - totalAssigned);
+}
+
+// --- SETTLERS RESEARCH ---
+function settAdvanceResearch() {
+  if (!sett.currentResearch) return;
+  const academy = sett.buildings.find(b => b.type === 'academy' && b.built && !b.upgrading && b.workers > 0);
+  if (!academy) return;
+  const def = SETT_BUILDING_DEFS.academy;
+  const lv = def.levels[academy.level];
+  sett.currentResearch.progress += lv.researchSpeed;
+  if (sett.currentResearch.progress >= sett.currentResearch.target) {
+    sett.researched[sett.currentResearch.key] = true;
+    const tech = SETT_TECH_TREE[sett.currentResearch.key];
+    settNotify('Research complete: ' + tech.name + '!', '#64b5f6');
+    spawnFloatingText(academy.gx, academy.gy, tech.name + '!', '#64b5f6');
+    sett.currentResearch = null;
+  }
+}
+
+function settStartResearch(techKey) {
+  const tech = SETT_TECH_TREE[techKey];
+  if (!tech || sett.researched[techKey] || sett.currentResearch) return;
+  if (tech.requires.some(r => !sett.researched[r])) return;
+  for (const [res, amt] of Object.entries(tech.cost)) {
+    if ((sett.resources[res] || 0) < amt) return;
+  }
+  for (const [res, amt] of Object.entries(tech.cost)) sett.resources[res] -= amt;
+  sett.currentResearch = { key: techKey, progress: 0, target: tech.time };
+  settNotify('Researching: ' + tech.name, '#64b5f6');
+  document.getElementById('overlay').classList.remove('show');
+}
+
+// --- SETTLERS MILITARY ---
+function settTrainUnit(unitType, barracksId) {
+  const udef = SETT_UNIT_TYPES[unitType];
+  if (!udef) return;
+  if (udef.requires && !sett.researched[udef.requires]) return;
+  for (const [res, amt] of Object.entries(udef.cost)) {
+    if ((sett.resources[res] || 0) < amt) return;
+  }
+  for (const [res, amt] of Object.entries(udef.cost)) sett.resources[res] -= amt;
+  const barracks = sett.buildings.find(b => b.id === barracksId);
+  const trainSpeed = barracks ? SETT_BUILDING_DEFS.barracks.levels[barracks.level].trainSpeed : 1;
+  sett.training.push({ unitType, barracksId, progress: 0, target: Math.ceil(udef.trainTime / trainSpeed) });
+  settNotify('Training ' + udef.name + '...', '#ffa726');
+  document.getElementById('overlay').classList.remove('show');
+}
+
+function settAdvanceTraining() {
+  for (let i = sett.training.length - 1; i >= 0; i--) {
+    sett.training[i].progress++;
+    if (sett.training[i].progress >= sett.training[i].target) {
+      const t = sett.training[i];
+      const udef = SETT_UNIT_TYPES[t.unitType];
+      const barracks = sett.buildings.find(b => b.id === t.barracksId);
+      const pos = barracks ? { x: barracks.gx, y: barracks.gy + 1 } : { x: player.x, y: player.y };
+      sett.units.push({
+        id: sett.nextUnitId++,
+        type: t.unitType,
+        gx: pos.x, gy: pos.y,
+        hp: udef.hp, maxHp: udef.hp,
+      });
+      sett.training.splice(i, 1);
+      settNotify(udef.name + ' ready!', '#4caf50');
+      if (barracks) spawnFloatingText(barracks.gx, barracks.gy, udef.name + '!', '#4caf50');
+    }
+  }
+}
+
+function settGetMilitaryPower() {
+  let total = 0;
+  const bsmith = sett.buildings.find(b => b.type === 'blacksmith' && b.built);
+  const atkBonus = bsmith ? SETT_BUILDING_DEFS.blacksmith.levels[bsmith.level].atkBonus : 0;
+  for (const u of sett.units) {
+    total += SETT_UNIT_TYPES[u.type].str + atkBonus;
+  }
+  return total;
+}
+
+// --- SETTLERS COMBAT ---
+function settShouldAutoResolve(playerStr, enemyStr) {
+  if (playerStr >= enemyStr * 2) return true;
+  if (enemyStr < 15) return true;
+  return false;
+}
+
+function settAutoResolveBattle(enemyStr) {
+  const pStr = settGetMilitaryPower();
+  if (pStr >= enemyStr) {
+    const lossRatio = Math.min(0.5, enemyStr / pStr * 0.4);
+    const unitsToLose = Math.max(0, Math.floor(sett.units.length * lossRatio));
+    for (let i = 0; i < unitsToLose && sett.units.length > 0; i++) {
+      const weakest = sett.units.reduce((a, b) => (a.hp < b.hp ? a : b));
+      sett.units = sett.units.filter(u => u.id !== weakest.id);
+    }
+    return { won: true };
+  } else {
+    const unitsToLose = Math.max(1, Math.floor(sett.units.length * 0.5));
+    for (let i = 0; i < unitsToLose && sett.units.length > 0; i++) {
+      sett.units.pop();
+    }
+    return { won: false };
+  }
+}
+
+// --- SETTLERS RAIDS ---
+function settCheckRaid() {
+  sett.raidTimer++;
+  const builtCount = sett.buildings.filter(b => b.built).length;
+  const interval = Math.max(15, 30 - Math.floor(builtCount / 2));
+  if (sett.raidTimer < interval) return;
+  sett.raidTimer = 0;
+  sett.raidDifficulty = 1 + Math.floor(builtCount / 5) + Math.floor(sett.turnCount / 100);
+  const raidStr = 8 + sett.raidDifficulty * 5 + randInt(0, sett.raidDifficulty * 3);
+  settSpawnRaid(raidStr);
+}
+
+function settSpawnRaid(strength) {
+  const hasWatchtower = sett.buildings.some(b => b.type === 'watchtower' && b.built);
+  if (hasWatchtower) {
+    settNotify('Watchtower spots incoming raid!', '#ff9800');
+  }
+  // Spawn at edge of explored area
+  const cx = sett.mapCenterX, cy = sett.mapCenterY;
+  const angle = Math.random() * Math.PI * 2;
+  const dist2 = 15 + randInt(0, 10);
+  const ex = Math.round(cx + Math.cos(angle) * dist2);
+  const ey = Math.round(cy + Math.sin(angle) * dist2);
+  // Resolve the raid
+  const pStr = settGetMilitaryPower();
+  // Wall defense bonus
+  let wallBonus = 0;
+  for (const b of sett.buildings) {
+    if (b.type === 'wall_seg' && b.built) wallBonus += SETT_BUILDING_DEFS.wall_seg.levels[b.level].defense;
+  }
+  const effectivePStr = pStr + wallBonus;
+  if (settShouldAutoResolve(effectivePStr, strength)) {
+    const result = settAutoResolveBattle(strength);
+    if (result.won) {
+      settNotify('Raid repelled! (str ' + strength + ')', '#4caf50');
+      const goldReward = Math.floor(strength * 0.5);
+      sett.resources.gold = Math.min(sett.storageCap.gold, sett.resources.gold + goldReward);
+      spawnFloatingText(player.x, player.y, '+' + goldReward + 'g', '#ffd54f');
+    } else {
+      settNotify('Raid overwhelmed defenses! (str ' + strength + ')', '#f44336');
+      // Damage a random building
+      const targets = sett.buildings.filter(b => b.built);
+      if (targets.length > 0) {
+        const target = targets[randInt(0, targets.length - 1)];
+        target.hp -= Math.floor(strength * 0.3);
+        if (target.hp <= 0) {
+          settNotify(SETT_BUILDING_DEFS[target.type].name + ' destroyed by raid!', '#f44336');
+          settDemolish(target.id);
+        }
+      }
+    }
+  } else {
+    // Major battle - use existing tactical battle system
+    // Build an army for the player from settlers units
+    const pArmy = newArmy();
+    // Map settlers units to conquerers troop types for battle
+    for (const u of sett.units) {
+      const mapping = { militia: 'riflemen', spearman: 'gunners', archer: 'snipers', knight: 'tanks', catapult: 'bombers' };
+      const troopType = mapping[u.type] || 'riflemen';
+      addTroops(pArmy, troopType, 1);
+    }
+    if (armyTotal(pArmy) === 0) addTroops(pArmy, 'riflemen', 2); // min defense
+    player.army = pArmy;
+    // Create fake enemy for battle
+    const raidEnemy = { x: ex, y: ey, str: strength, type: 'militant', vx: ex, vy: ey, arrowCooldown: 0, patrol: 0, charged: false };
+    enemies.push(raidEnemy);
+    const ei = enemies.length - 1;
+    enterBattle(enemies, ei, false);
+    settNotify('Major raid incoming! Prepare for battle!', '#f44336');
+  }
+}
+
+// --- SETTLERS TERRITORY ---
+function settRecalcTerritory() {
+  const maxY = grassMap.length;
+  for (let y = 0; y < maxY; y++) {
+    if (!territoryMap[y]) territoryMap[y] = [];
+    const maxX = grassMap[y] ? grassMap[y].length : 0;
+    for (let x = 0; x < maxX; x++) territoryMap[y][x] = null;
+  }
+  for (const b of sett.buildings) {
+    if (!b.built) continue;
+    const maxR = b.type === 'watchtower' ? (SETT_BUILDING_DEFS.watchtower.levels[b.level].visionRange || 4) :
+                  b.type === 'house' ? 3 : 2;
+    const queue = [{x: b.gx, y: b.gy, d: 0}];
+    const visited = new Set();
+    visited.add(k(b.gx, b.gy));
+    if (territoryMap[b.gy]) territoryMap[b.gy][b.gx] = 'player';
+    while (queue.length) {
+      const c = queue.shift();
+      if (c.d >= maxR) continue;
+      for (const [ddx, ddy] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+        const nx = c.x + ddx, ny = c.y + ddy;
+        if (ny < 0 || nx < 0 || !grassMap[ny] || grassMap[ny][nx] === undefined) continue;
+        if (visited.has(k(nx, ny))) continue;
+        if (waterMap[ny] && waterMap[ny][nx]) continue;
+        visited.add(k(nx, ny));
+        if (!territoryMap[ny]) territoryMap[ny] = [];
+        territoryMap[ny][nx] = 'player';
+        queue.push({x: nx, y: ny, d: c.d + 1});
+      }
+    }
+  }
+  minimapDirty = true;
+}
+
+// --- SETTLERS FOG ---
+function settRevealAround(cx2, cy2, r) {
+  for (let dy2 = -r; dy2 <= r; dy2++) {
+    for (let dx2 = -r; dx2 <= r; dx2++) {
+      if (dx2 * dx2 + dy2 * dy2 > r * r) continue;
+      const nx = cx2 + dx2, ny = cy2 + dy2;
+      if (ny >= 0 && nx >= 0 && fogMap[ny] && fogMap[ny][nx] !== undefined) {
+        fogMap[ny][nx] = 2;
+      }
+    }
+  }
+  minimapDirty = true;
+}
+
+function settDimFog() {
+  const maxY = grassMap.length;
+  for (let y = 0; y < maxY; y++) {
+    if (!fogMap[y]) continue;
+    for (let x = 0; x < fogMap[y].length; x++) {
+      if (fogMap[y][x] === 2) fogMap[y][x] = 1;
+    }
+  }
+  settRevealAround(player.x, player.y, 5);
+  for (const b of sett.buildings) {
+    if (!b.built || b.type !== 'watchtower') continue;
+    const vr = SETT_BUILDING_DEFS.watchtower.levels[b.level].visionRange || 4;
+    settRevealAround(b.gx, b.gy, vr);
+  }
+}
+
+// --- SETTLERS NOTIFICATIONS ---
+function settNotify(text, color) {
+  sett.notifications.push({ text, color, turn: sett.turnCount });
+  if (sett.notifications.length > 20) sett.notifications.shift();
+}
+
+// --- SETTLERS MOVEMENT ---
+function settTryMove(dx, dy) {
+  if (isAnimating) {
+    if (moveQueue.length < 2) moveQueue.push({ dx, dy });
+    return;
+  }
+  const nx = player.x + dx, ny = player.y + dy;
+  if (ny < 0 || nx < 0) return;
+  if (!grassMap[ny] || grassMap[ny][nx] === undefined) return;
+  if (walls.has(k(nx, ny))) return;
+  if (waterMap[ny] && waterMap[ny][nx]) return;
+  // Check if building is there (can walk on own buildings)
+  isAnimating = true;
+  player.lastDx = dx; player.lastDy = dy;
+  player.x = nx; player.y = ny;
+  sett.turnCount++;
+  // Expand map
+  settExpandMapIfNeeded(nx, ny);
+  // Check enemy encounter
+  const ei = enemies.findIndex(e => e.x === nx && e.y === ny);
+  if (ei !== -1) {
+    const e = enemies[ei];
+    const pStr = settGetMilitaryPower();
+    if (settShouldAutoResolve(pStr, e.str)) {
+      const result = settAutoResolveBattle(e.str);
+      if (result.won) {
+        spawnFloatingText(nx, ny, 'Victory!', '#4caf50');
+        const goldReward = Math.floor(e.str * 0.5);
+        sett.resources.gold = Math.min(sett.storageCap.gold, sett.resources.gold + goldReward);
+        spawnFloatingText(nx, ny, '+' + goldReward + 'g', '#ffd54f');
+        enemies.splice(ei, 1);
+      } else {
+        spawnFloatingText(nx, ny, 'Defeat!', '#f44336');
+        player.x -= dx; player.y -= dy;
+      }
+    } else {
+      // Major battle via tactical system
+      const pArmy = newArmy();
+      for (const u of sett.units) {
+        const mapping = { militia: 'riflemen', spearman: 'gunners', archer: 'snipers', knight: 'tanks', catapult: 'bombers' };
+        addTroops(pArmy, mapping[u.type] || 'riflemen', 1);
+      }
+      if (armyTotal(pArmy) === 0) addTroops(pArmy, 'riflemen', 2);
+      player.army = pArmy;
+      enterBattle(enemies, ei, false);
+      return;
+    }
+  }
+  // Per-turn ticks
+  settResourceTick();
+  settAdvanceConstruction();
+  settAdvanceResearch();
+  settAdvanceTraining();
+  settPopulationGrowth();
+  settCheckRaid();
+  settHealUnits();
+  settDimFog();
+  settUpdateHUD();
+  minimapDirty = true;
+  // Auto-save every 50 turns
+  if (sett.turnCount % 50 === 0 && sett.turnCount > 0) settSaveGame(0);
+}
+
+function settHealUnits() {
+  const hospital = sett.buildings.find(b => b.type === 'hospital' && b.built && !b.upgrading && b.workers > 0);
+  if (!hospital) return;
+  const healRate = SETT_BUILDING_DEFS.hospital.levels[hospital.level].healRate;
+  const healBoost = sett.researched.medicine ? 2 : 0;
+  for (const u of sett.units) {
+    if (u.hp < u.maxHp) {
+      u.hp = Math.min(u.maxHp, u.hp + healRate + healBoost);
+    }
+  }
+}
+
+// --- SETTLERS UI ---
+function settUpdateHUD() {
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('shop').style.display = 'none';
+  document.getElementById('engineer-shop').style.display = 'none';
+  const settHud = document.getElementById('sett-hud');
+  settHud.style.display = 'flex';
+  let html = '';
+  for (const res of SETT_RESOURCES) {
+    const def = SETT_RESOURCE_DEFS[res];
+    const val = sett.resources[res];
+    const cap = sett.storageCap[res];
+    html += '<span style="background:linear-gradient(180deg,#1a2744 0%,#0f1b30 100%);padding:3px 8px;border-radius:5px;border:1px solid #2a3a5a;">';
+    html += '<span style="color:#778;font-size:0.75rem">' + def.icon + '</span> ';
+    html += '<span style="font-weight:bold;color:' + def.color + '">' + val + '</span>';
+    html += '<span style="color:#556;font-size:0.7rem">/' + cap + '</span></span>';
+  }
+  html += '<span style="background:linear-gradient(180deg,#2a1a44 0%,#1a0f30 100%);padding:3px 8px;border-radius:5px;border:1px solid #3a2a5a;">';
+  html += '<span style="color:#778;font-size:0.75rem">Pop</span> ';
+  html += '<span style="font-weight:bold;color:#ce93d8">' + sett.population + '/' + sett.popCap + '</span>';
+  html += ' <span style="color:#888;font-size:0.7rem">(' + sett.idleWorkers + ' idle)</span></span>';
+  html += '<span style="background:linear-gradient(180deg,#1a2744 0%,#0f1b30 100%);padding:3px 8px;border-radius:5px;border:1px solid #2a3a5a;">';
+  html += '<span style="color:#778;font-size:0.75rem">Morale</span> ';
+  html += '<span style="font-weight:bold;color:' + (sett.morale >= 5 ? '#4caf50' : '#f44336') + '">' + sett.morale + '</span></span>';
+  html += '<span style="background:linear-gradient(180deg,#1a2744 0%,#0f1b30 100%);padding:3px 8px;border-radius:5px;border:1px solid #2a3a5a;">';
+  html += '<span style="color:#778;font-size:0.75rem">Army</span> ';
+  html += '<span style="font-weight:bold;color:#ff8a65">' + sett.units.length + '</span></span>';
+  if (sett.currentResearch) {
+    const pct = Math.floor((sett.currentResearch.progress / sett.currentResearch.target) * 100);
+    html += '<span style="background:linear-gradient(180deg,#1a2744 0%,#0f1b30 100%);padding:3px 8px;border-radius:5px;border:1px solid #2a3a5a;">';
+    html += '<span style="color:#64b5f6;font-size:0.75rem">Research ' + pct + '%</span></span>';
+  }
+  settHud.innerHTML = html;
+}
+
+function settUpdateControls() {
+  const controls = document.getElementById('controls');
+  controls.innerHTML = '';
+  const btn = (text, onclick) => { const b = document.createElement('button'); b.textContent = text; b.onclick = onclick; controls.appendChild(b); };
+  btn('Build (B)', () => settToggleBuildMenu());
+  btn('Settlement', () => settShowSettlementInfo());
+  btn('Research', () => settShowResearchMenu());
+  btn('Save/Load', () => settShowSaveLoadUI());
+  btn('Back to Menu', () => settBackToMenu());
+}
+
+function settBackToMenu() {
+  appMode = 'conquerers';
+  sett = null;
+  document.getElementById('sett-hud').style.display = 'none';
+  document.getElementById('hud').style.display = 'flex';
+  document.getElementById('shop').style.display = 'flex';
+  document.getElementById('engineer-shop').style.display = 'flex';
+  // Restore controls
+  document.getElementById('controls').innerHTML =
+    '<button onclick="newGame()">Restart Game</button>' +
+    '<button onclick="showSaveLoadUI()">Save/Load</button>' +
+    '<button onclick="tryBuildFort()" id="buildFortBtn">Build Fort</button>';
+  // Show start screen
+  const _existingSaves2 = getSaves();
+  const _hasSaves2 = Object.keys(_existingSaves2).length > 0;
+  if (_hasSaves2) {
+    let html = '<div style="text-align:center;font-family:sans-serif;">';
+    html += '<p style="color:#aaa;margin:4px 0">Welcome back!</p>';
+    html += '<button onclick="showSaveLoadUI()" style="padding:6px 16px;margin:4px;font-size:13px">Load Game</button>';
+    html += '<button onclick="document.getElementById(\'overlay\').classList.remove(\'show\');showOverlay(\'CONQUERERS\',\'Enter your name, commander.\',\'Start Game\',()=>newGame(),true)" style="padding:6px 16px;margin:4px;font-size:13px">New Conquest</button>';
+    html += '<button onclick="startSettlersMode()" style="padding:6px 16px;margin:4px;font-size:13px;background:linear-gradient(180deg,#1a3a1a 0%,#0e1a0e 100%);color:#81c784;border:1px solid #2e5a32">Settlers Mode</button>';
+    html += '</div>';
+    document.getElementById('overlayTitle').textContent = 'CONQUERERS';
+    document.getElementById('overlayTitle').style.color = '#f0c040';
+    document.getElementById('overlayMsg').innerHTML = html;
+    document.getElementById('overlayBtn').style.display = 'none';
+    document.getElementById('overlayInput').style.display = 'none';
+    document.getElementById('overlay').classList.add('show');
+  } else {
+    showOverlay('CONQUERERS', 'Enter your name, commander.', 'Start Game', () => newGame(), true);
+  }
+}
+
+// --- BUILD MENU ---
+function settToggleBuildMenu() {
+  if (sett.buildMode) { sett.buildMode = false; sett.buildSelected = null; msg(''); return; }
+  let html = '<div style="text-align:center;font-family:sans-serif;max-width:520px">';
+  html += '<h3 style="color:#ffd54f;margin:0 0 8px">BUILD</h3>';
+  const categories = ['production', 'infrastructure', 'military', 'defense', 'economy'];
+  for (const cat of categories) {
+    html += '<div style="margin:6px 0"><span style="color:#aaa;font-size:11px;text-transform:uppercase">' + cat + '</span></div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:4px;justify-content:center">';
+    for (const [bkey, def] of Object.entries(SETT_BUILDING_DEFS)) {
+      if (def.category !== cat) continue;
+      const lv = def.levels[0];
+      const canAfford = Object.entries(lv.cost).every(([r, a]) => (sett.resources[r] || 0) >= a);
+      const costStr = Object.entries(lv.cost).map(([r, a]) => a + SETT_RESOURCE_DEFS[r].icon).join(' ');
+      html += '<button onclick="settSelectBuild(\'' + bkey + '\')" style="font-size:10px;padding:3px 8px;' + (canAfford ? '' : 'opacity:0.4;') + '">' + def.name + '<br><span style="font-size:9px;color:#aaa">' + costStr + '</span></button>';
+    }
+    html += '</div>';
+  }
+  html += '<div style="margin-top:8px"><button onclick="document.getElementById(\'overlay\').classList.remove(\'show\')" style="padding:4px 16px">Close</button></div></div>';
+  document.getElementById('overlayTitle').textContent = '';
+  document.getElementById('overlayMsg').innerHTML = html;
+  document.getElementById('overlayBtn').style.display = 'none';
+  document.getElementById('overlayInput').style.display = 'none';
+  document.getElementById('overlay').classList.add('show');
+}
+
+function settSelectBuild(type) {
+  document.getElementById('overlay').classList.remove('show');
+  sett.buildMode = true;
+  sett.buildSelected = type;
+  msg('Click a tile to place ' + SETT_BUILDING_DEFS[type].name + ' (ESC to cancel)');
+}
+
+// --- BUILDING INFO PANEL ---
+function settShowBuildingInfo(buildingId) {
+  const b = sett.buildings.find(b2 => b2.id === buildingId);
+  if (!b) return;
+  const def = SETT_BUILDING_DEFS[b.type];
+  const lv = def.levels[b.level];
+  let html = '<div style="text-align:center;font-family:sans-serif;max-width:400px">';
+  html += '<h3 style="color:#64b5f6;margin:0 0 6px">' + def.name + ' (Lv' + (b.level + 1) + ')</h3>';
+  if (!b.built || b.upgrading) {
+    const label = b.upgrading ? 'Upgrading' : 'Building';
+    html += '<p style="color:#ffa726;font-size:12px">' + label + ': ' + b.buildProgress + '/' + b.buildTarget + ' turns</p>';
+  } else {
+    if (def.workers > 0) {
+      html += '<div style="margin:6px 0;color:#aaa;font-size:12px">Workers: ' + b.workers + '/' + def.workers + '</div>';
+      html += '<button onclick="settAssignWorker(' + b.id + ');settShowBuildingInfo(' + b.id + ')" style="font-size:10px;padding:2px 8px;margin:2px">+ Worker</button>';
+      html += '<button onclick="settUnassignWorker(' + b.id + ');settShowBuildingInfo(' + b.id + ')" style="font-size:10px;padding:2px 8px;margin:2px">- Worker</button>';
+    }
+    if (lv.production) {
+      const eff = def.workers > 0 ? Math.min(1, b.workers / def.workers) : 1;
+      html += '<div style="color:#aaa;font-size:11px;margin-top:4px">Output: ';
+      for (const [res, rate] of Object.entries(lv.production)) {
+        html += Math.floor(rate * eff) + ' ' + SETT_RESOURCE_DEFS[res].name + '/turn ';
+      }
+      html += '</div>';
+    }
+    // Barracks: train units
+    if (b.type === 'barracks') {
+      html += '<div style="margin-top:6px"><span style="color:#aaa;font-size:11px">Train Units:</span><br>';
+      for (const [uKey, uDef] of Object.entries(SETT_UNIT_TYPES)) {
+        if (uDef.requires && !sett.researched[uDef.requires]) continue;
+        const costStr = Object.entries(uDef.cost).map(([r, a]) => a + SETT_RESOURCE_DEFS[r].icon).join(' ');
+        const canAfford = Object.entries(uDef.cost).every(([r, a]) => (sett.resources[r] || 0) >= a);
+        html += '<button onclick="settTrainUnit(\'' + uKey + '\',' + b.id + ')" style="font-size:10px;padding:2px 8px;margin:2px;' + (canAfford ? '' : 'opacity:0.4') + '">' + uDef.name + ' (' + costStr + ')</button>';
+      }
+      html += '</div>';
+    }
+    // Market: trade
+    if (b.type === 'market') {
+      const ratio = lv.tradeRatio || 4;
+      html += '<div style="margin-top:6px"><span style="color:#aaa;font-size:11px">Trade (' + ratio + ':1 ratio):</span><br>';
+      for (const res of SETT_RESOURCES) {
+        if (res === 'gold') continue;
+        html += '<button onclick="settTrade(\'' + res + '\',' + ratio + ')" style="font-size:10px;padding:2px 6px;margin:1px">' + ratio + ' ' + SETT_RESOURCE_DEFS[res].icon + ' → 1G</button>';
+      }
+      html += '</div>';
+    }
+    // Upgrade button
+    if (b.level < def.levels.length - 1) {
+      const nextLv = def.levels[b.level + 1];
+      const costStr = Object.entries(nextLv.cost).map(([r, a]) => a + SETT_RESOURCE_DEFS[r].icon).join(' ');
+      const canUp = settCanUpgrade(b.id);
+      html += '<div style="margin-top:8px"><button onclick="settUpgradeBuilding(' + b.id + ');document.getElementById(\'overlay\').classList.remove(\'show\')" style="font-size:11px;padding:3px 10px;background:linear-gradient(180deg,#2a2a1a 0%,#1a1a0e 100%);color:#ffd54f;border:1px solid #5a5a2e;' + (canUp ? '' : 'opacity:0.4') + '">Upgrade to Lv' + (b.level + 2) + ' (' + costStr + ')</button></div>';
+    }
+  }
+  html += '<div style="margin-top:8px"><button onclick="settDemolish(' + b.id + ')" style="font-size:10px;padding:2px 8px;color:#f44336">Demolish</button>';
+  html += ' <button onclick="document.getElementById(\'overlay\').classList.remove(\'show\')" style="font-size:11px;padding:3px 12px">Close</button></div></div>';
+  document.getElementById('overlayTitle').textContent = '';
+  document.getElementById('overlayMsg').innerHTML = html;
+  document.getElementById('overlayBtn').style.display = 'none';
+  document.getElementById('overlayInput').style.display = 'none';
+  document.getElementById('overlay').classList.add('show');
+}
+
+function settTrade(res, ratio) {
+  if ((sett.resources[res] || 0) < ratio) return;
+  sett.resources[res] -= ratio;
+  sett.resources.gold = Math.min(sett.storageCap.gold, sett.resources.gold + 1);
+  settUpdateHUD();
+}
+
+// --- RESEARCH MENU ---
+function settShowResearchMenu() {
+  let html = '<div style="text-align:center;font-family:sans-serif;max-width:450px">';
+  html += '<h3 style="color:#64b5f6;margin:0 0 8px">RESEARCH</h3>';
+  if (sett.currentResearch) {
+    const tech = SETT_TECH_TREE[sett.currentResearch.key];
+    const pct = Math.floor((sett.currentResearch.progress / sett.currentResearch.target) * 100);
+    html += '<p style="color:#ffa726;font-size:12px">Researching: ' + tech.name + ' (' + pct + '%)</p>';
+  }
+  const hasAcademy = sett.buildings.some(b => b.type === 'academy' && b.built && b.workers > 0);
+  if (!hasAcademy) html += '<p style="color:#f44336;font-size:11px">Need a staffed Academy to research!</p>';
+  for (const [tkey, tech] of Object.entries(SETT_TECH_TREE)) {
+    if (sett.researched[tkey]) {
+      html += '<div style="margin:3px;padding:4px 10px;font-size:11px;color:#4caf50;border:1px solid #2e5a32;border-radius:4px;display:inline-block">' + tech.name + ' ✓</div>';
+      continue;
+    }
+    const prereqsMet = tech.requires.every(r => sett.researched[r]);
+    const canAfford = Object.entries(tech.cost).every(([r, a]) => (sett.resources[r] || 0) >= a);
+    const available = prereqsMet && canAfford && hasAcademy && !sett.currentResearch;
+    const costStr = Object.entries(tech.cost).map(([r, a]) => a + SETT_RESOURCE_DEFS[r].icon).join(' ');
+    html += '<div style="margin:3px;display:inline-block"><button onclick="settStartResearch(\'' + tkey + '\')" style="font-size:10px;padding:3px 8px;' + (available ? '' : 'opacity:0.4') + '">' + tech.name + '<br><span style="font-size:9px;color:#aaa">' + costStr + '</span></button></div>';
+  }
+  html += '<div style="margin-top:8px"><button onclick="document.getElementById(\'overlay\').classList.remove(\'show\')" style="padding:4px 16px">Close</button></div></div>';
+  document.getElementById('overlayTitle').textContent = '';
+  document.getElementById('overlayMsg').innerHTML = html;
+  document.getElementById('overlayBtn').style.display = 'none';
+  document.getElementById('overlayInput').style.display = 'none';
+  document.getElementById('overlay').classList.add('show');
+}
+
+// --- SETTLEMENT INFO ---
+function settShowSettlementInfo() {
+  let html = '<div style="text-align:center;font-family:sans-serif;max-width:400px">';
+  html += '<h3 style="color:#f0c040;margin:0 0 8px">' + sett.settlementName + '</h3>';
+  html += '<p style="color:#aaa;font-size:12px">Turn ' + sett.turnCount + ' | Pop ' + sett.population + '/' + sett.popCap + ' | Morale ' + sett.morale + '/10</p>';
+  html += '<p style="color:#aaa;font-size:11px">Buildings: ' + sett.buildings.filter(b => b.built).length + ' | Army: ' + sett.units.length + ' units (Power: ' + settGetMilitaryPower() + ')</p>';
+  html += '<p style="color:#aaa;font-size:11px">Food production: ' + settCalcFoodProduction() + '/turn | Need: ' + Math.ceil(sett.population / 2) + '/turn</p>';
+  if (sett.training.length > 0) {
+    html += '<p style="color:#ffa726;font-size:11px">Training: ' + sett.training.map(t => SETT_UNIT_TYPES[t.unitType].name + ' (' + t.progress + '/' + t.target + ')').join(', ') + '</p>';
+  }
+  html += '<div style="margin-top:6px"><span style="color:#aaa;font-size:11px">Researched:</span><br>';
+  const researched = Object.keys(sett.researched);
+  if (researched.length === 0) html += '<span style="color:#556;font-size:10px">None yet</span>';
+  else html += researched.map(r => '<span style="color:#64b5f6;font-size:10px">' + SETT_TECH_TREE[r].name + '</span>').join(', ');
+  html += '</div>';
+  html += '<div style="margin-top:8px"><button onclick="document.getElementById(\'overlay\').classList.remove(\'show\')" style="padding:4px 16px">Close</button></div></div>';
+  document.getElementById('overlayTitle').textContent = '';
+  document.getElementById('overlayMsg').innerHTML = html;
+  document.getElementById('overlayBtn').style.display = 'none';
+  document.getElementById('overlayInput').style.display = 'none';
+  document.getElementById('overlay').classList.add('show');
+}
+
+// --- SETTLERS SAVE/LOAD ---
+const SETT_SAVE_KEY = 'conquerers_settlers_saves';
+function settGetSaves() { try { return JSON.parse(localStorage.getItem(SETT_SAVE_KEY)) || {}; } catch { return {}; } }
+
+function settSaveGame(slot) {
+  if (!sett) return;
+  const saves = settGetSaves();
+  saves['slot' + slot] = {
+    playerName, playerX: player.x, playerY: player.y,
+    sett: JSON.parse(JSON.stringify(sett)),
+    enemies: enemies.map(e => ({ x: e.x, y: e.y, str: e.str, type: e.type })),
+    walls: [...walls],
+    grassMap: grassMap.map(row => row ? row.slice() : null),
+    treeMap: treeMap.map(row => row ? row.slice() : null),
+    waterMap: waterMap.map(row => row ? row.slice() : null),
+    pathMap: pathMap.map(row => row ? row.slice() : null),
+    fogMap: fogMap.map(row => row ? row.slice() : null),
+    timestamp: Date.now(),
+  };
+  try { localStorage.setItem(SETT_SAVE_KEY, JSON.stringify(saves)); settNotify('Game saved to slot ' + slot, '#4caf50'); }
+  catch(e) { settNotify('Save failed! Storage full?', '#f44336'); }
+}
+
+function settLoadGame(slot) {
+  const saves = settGetSaves();
+  const data = saves['slot' + slot];
+  if (!data) return false;
+  appMode = 'settlers';
+  playerName = data.playerName;
+  sett = data.sett;
+  sett.notifications = sett.notifications || [];
+  sett.training = sett.training || [];
+  sett.buildMode = false; sett.buildSelected = null; sett.buildGhost = null;
+  grassMap = data.grassMap || [];
+  treeMap = data.treeMap || [];
+  waterMap = data.waterMap || [];
+  pathMap = data.pathMap || [];
+  fogMap = data.fogMap || [];
+  walls = new Set(data.walls || []);
+  enemies = (data.enemies || []).map(e => ({ ...e, vx: e.x, vy: e.y, arrowCooldown: 0, patrol: 0, charged: false }));
+  forts = []; allies = []; chests = []; mercCamps = []; overworldEngineers = []; playerForts = [];
+  territoryMap = [];
+  player = { x: data.playerX, y: data.playerY, army: newArmy(), lastDx: 1, lastDy: 0 };
+  playerVisual = { x: player.x, y: player.y };
+  camX = sett.camX; camY = sett.camY;
+  particles = []; floatingTexts = []; ambientParticles = [];
+  moveQueue = []; isAnimating = false;
+  followerTrail = []; followerVisuals = [];
+  settRecalcTerritory();
+  gameMode = 'overworld';
+  settUpdateHUD();
+  settUpdateControls();
+  minimapDirty = true;
+  return true;
+}
+
+function settShowSaveLoadUI() {
+  const saves = settGetSaves();
+  let html = '<div style="text-align:center;font-family:sans-serif;max-width:400px">';
+  html += '<h3 style="color:#f0c040;margin:0 0 8px">SETTLERS - SAVE / LOAD</h3>';
+  for (let i = 0; i <= 4; i++) {
+    const sd = saves['slot' + i];
+    const label = i === 0 ? 'Auto' : 'Slot ' + i;
+    if (sd) {
+      const d = new Date(sd.timestamp);
+      const info = (sd.sett.settlementName || 'Settlement') + ' | Turn ' + (sd.sett.turnCount || 0) + ' | ' + d.toLocaleDateString();
+      html += '<div style="margin:4px 0">';
+      html += '<button onclick="settLoadGame(' + i + ');document.getElementById(\'overlay\').classList.remove(\'show\')" style="font-size:11px;padding:3px 10px;margin:2px">Load ' + label + '</button>';
+      if (i > 0) html += '<button onclick="settSaveGame(' + i + ');settShowSaveLoadUI()" style="font-size:11px;padding:3px 10px;margin:2px">Save ' + label + '</button>';
+      html += '<span style="color:#aaa;font-size:10px;margin-left:6px">' + info + '</span>';
+      html += '</div>';
+    } else if (i > 0) {
+      html += '<div style="margin:4px 0"><button onclick="settSaveGame(' + i + ');settShowSaveLoadUI()" style="font-size:11px;padding:3px 10px;margin:2px">Save ' + label + '</button><span style="color:#556;font-size:10px;margin-left:6px">Empty</span></div>';
+    }
+  }
+  html += '<div style="margin-top:8px"><button onclick="document.getElementById(\'overlay\').classList.remove(\'show\')" style="padding:4px 16px">Close</button></div></div>';
+  document.getElementById('overlayTitle').textContent = '';
+  document.getElementById('overlayMsg').innerHTML = html;
+  document.getElementById('overlayBtn').style.display = 'none';
+  document.getElementById('overlayInput').style.display = 'none';
+  document.getElementById('overlay').classList.add('show');
+}
+
+// --- SETTLERS RENDERING ---
+function settUpdateSmooth() {
+  camX += (player.x - camX) * CAM_SPEED;
+  camY += (player.y - camY) * CAM_SPEED;
+  const spd = MOVE_SPEED;
+  playerVisual.x += (player.x - playerVisual.x) * spd;
+  playerVisual.y += (player.y - playerVisual.y) * spd;
+  if (Math.abs(player.x - playerVisual.x) < 0.01) playerVisual.x = player.x;
+  if (Math.abs(player.y - playerVisual.y) < 0.01) playerVisual.y = player.y;
+  if (shake > 0) shake *= 0.88;
+  if (shake < 0.3) shake = 0;
+  const animDone = Math.abs(player.x - playerVisual.x) < 0.15 && Math.abs(player.y - playerVisual.y) < 0.15;
+  if (isAnimating && animDone) {
+    isAnimating = false;
+    if (moveQueue.length > 0) {
+      const next = moveQueue.shift();
+      settTryMove(next.dx, next.dy);
+    }
+  }
+}
+
+function settGetVisibleRange() {
+  const margin = 3;
+  const halfW = Math.ceil(W / TILE_W) + margin;
+  const halfH = Math.ceil((H - PANEL_H) / TILE_H) + margin;
+  return {
+    minX: Math.max(0, Math.floor(camX - halfW)),
+    maxX: Math.ceil(camX + halfW),
+    minY: Math.max(0, Math.floor(camY - halfH)),
+    maxY: Math.ceil(camY + halfH),
+  };
+}
+
+function settDraw() {
+  const sx = shake > 0.1 ? (Math.random() - 0.5) * shake : 0;
+  const sy = shake > 0.1 ? (Math.random() - 0.5) * shake : 0;
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0, 0, W, H);
+  const vr = settGetVisibleRange();
+  // Build lookup maps
+  const _buildMap = new Map();
+  for (const b of sett.buildings) _buildMap.set(k(b.gx, b.gy), b);
+  const _unitMap = new Map();
+  for (const u of sett.units) _unitMap.set(k(u.gx, u.gy), u);
+  const _enemyMap2 = new Map();
+  for (const e of enemies) _enemyMap2.set(k(e.x, e.y), e);
+  // Z-sorted render
+  const minSum = vr.minX + vr.minY;
+  const maxSum = vr.maxX + vr.maxY;
+  for (let sum2 = minSum; sum2 <= maxSum; sum2++) {
+    for (let x = Math.max(vr.minX, sum2 - vr.maxY); x <= Math.min(vr.maxX, sum2 - vr.minY); x++) {
+      const y = sum2 - x;
+      if (y < 0 || x < 0) continue;
+      if (!grassMap[y] || grassMap[y][x] === undefined) continue;
+      const iso = toIso(x, y);
+      if (iso.x < -TILE_W || iso.x > W + TILE_W || iso.y < -80 || iso.y > H) continue;
+      const tKey = k(x, y);
+      const fog = fogMap[y] ? fogMap[y][x] : 0;
+      if (fog === 0) { drawFogTile(iso.x, iso.y, x, y); continue; }
+      // Territory tint
+      if (territoryMap[y] && territoryMap[y][x] === 'player') {
+        ctx.fillStyle = 'rgba(76,175,80,0.06)';
+        isoDiamondPath(iso.x, iso.y);
+        ctx.fill();
+      }
+      // Terrain
+      if (waterMap[y][x]) drawWater(iso.x, iso.y, x, y);
+      else if (walls.has(tKey)) drawWall(iso.x, iso.y, x, y);
+      else {
+        drawGround(iso.x, iso.y, grassMap[y][x], x, y);
+        if (treeMap[y][x]) drawTree(iso.x, iso.y, x, y);
+      }
+      if (fog === 1) {
+        const bld = _buildMap.get(tKey);
+        if (bld) settDrawBuilding(iso.x, iso.y, bld);
+        ctx.fillStyle = 'rgba(8,12,18,0.45)';
+        isoDiamondPath(iso.x, iso.y);
+        ctx.fill();
+        continue;
+      }
+      // fog=2
+      const bld = _buildMap.get(tKey);
+      if (bld) settDrawBuilding(iso.x, iso.y, bld);
+      const unit = _unitMap.get(tKey);
+      if (unit) settDrawUnit(iso.x, iso.y, unit);
+      const en = _enemyMap2.get(tKey);
+      if (en) {
+        ctx.fillStyle = SETT_ENEMY_TYPES[en.type] ? SETT_ENEMY_TYPES[en.type].color : '#b71c1c';
+        ctx.beginPath(); ctx.arc(iso.x, iso.y - 12, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = '8px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText(en.str, iso.x, iso.y - 20);
+      }
+      // Build ghost
+      if (sett.buildMode && sett.buildSelected) {
+        // Track ghost position from mouse (calculated in click handler)
+        if (sett.buildGhost && sett.buildGhost.gx === x && sett.buildGhost.gy === y) {
+          ctx.globalAlpha = 0.5;
+          settDrawBuildingByType(iso.x, iso.y, sett.buildSelected, 0);
+          ctx.globalAlpha = 1;
+        }
+      }
+      // Player
+      if (player.x === x && player.y === y) {
+        const piso = toIso(playerVisual.x, playerVisual.y);
+        drawPlayer(piso.x, piso.y);
+      }
+    }
+  }
+  // Effects
+  updateAmbientParticles();
+  updateParticles();
+  updateFloatingTexts();
+  // Minimap
+  settDrawMinimap();
+  // Vignette
+  const mapCX = W / 2, mapCY = (H - PANEL_H) / 2;
+  const vigGrad = ctx.createRadialGradient(mapCX, mapCY, W * 0.22, mapCX, mapCY, W * 0.65);
+  vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
+  vigGrad.addColorStop(0.7, 'rgba(0,0,0,0.15)');
+  vigGrad.addColorStop(1, 'rgba(0,0,0,0.45)');
+  ctx.fillStyle = vigGrad;
+  ctx.fillRect(0, 0, W, H - PANEL_H);
+  // Bottom panel
+  settDrawBottomPanel();
+  ctx.restore();
+}
+
+// --- BUILDING DRAWING ---
+function settDrawBuilding(sx, sy, bld) {
+  const def = SETT_BUILDING_DEFS[bld.type];
+  if (!bld.built && !bld.upgrading) {
+    // Under construction scaffolding
+    const pct = bld.buildProgress / bld.buildTarget;
+    ctx.globalAlpha = 0.4 + pct * 0.6;
+    settDrawBuildingByType(sx, sy, bld.type, 0);
+    ctx.globalAlpha = 1;
+    // Progress bar
+    const bw = 24;
+    ctx.fillStyle = '#333'; ctx.fillRect(sx - bw/2, sy - 28, bw, 3);
+    ctx.fillStyle = '#ffa726'; ctx.fillRect(sx - bw/2, sy - 28, bw * pct, 3);
+    return;
+  }
+  if (bld.upgrading) {
+    settDrawBuildingByType(sx, sy, bld.type, bld.level);
+    const pct = bld.buildProgress / bld.buildTarget;
+    const bw = 24;
+    ctx.fillStyle = '#333'; ctx.fillRect(sx - bw/2, sy - 28, bw, 3);
+    ctx.fillStyle = '#64b5f6'; ctx.fillRect(sx - bw/2, sy - 28, bw * pct, 3);
+    return;
+  }
+  settDrawBuildingByType(sx, sy, bld.type, bld.level);
+  // Level star indicator
+  if (bld.level > 0) {
+    ctx.fillStyle = '#ffd54f';
+    ctx.font = '8px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('★'.repeat(bld.level + 1), sx, sy - 22);
+  }
+  // Worker dots
+  if (def.workers > 0 && bld.workers > 0) {
+    for (let i = 0; i < bld.workers; i++) {
+      ctx.fillStyle = '#4caf50';
+      ctx.beginPath(); ctx.arc(sx - 8 + i * 5, sy + 12, 2, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+}
+
+function settDrawBuildingByType(sx, sy, type, level) {
+  switch (type) {
+    case 'house': settDrawHouse(sx, sy, level); break;
+    case 'farm': settDrawFarm(sx, sy, level); break;
+    case 'lumbermill': settDrawLumbermill(sx, sy, level); break;
+    case 'quarry': settDrawQuarry(sx, sy, level); break;
+    case 'mine': settDrawMine(sx, sy, level); break;
+    case 'huntingLodge': settDrawHuntingLodge(sx, sy, level); break;
+    case 'barracks': settDrawBarracks(sx, sy, level); break;
+    case 'wall_seg': settDrawWallSeg(sx, sy, level); break;
+    case 'watchtower': settDrawWatchtower(sx, sy, level); break;
+    case 'market': settDrawMarket(sx, sy, level); break;
+    case 'blacksmith': settDrawBlacksmith(sx, sy, level); break;
+    case 'warehouse': settDrawWarehouse(sx, sy, level); break;
+    case 'hospital': settDrawHospital(sx, sy, level); break;
+    case 'academy': settDrawAcademy(sx, sy, level); break;
+    case 'temple': settDrawTemple(sx, sy, level); break;
+    case 'port': settDrawPort(sx, sy, level); break;
+    default: drawIsoBox(sx, sy, 14, '#888', '#666', '#555'); break;
+  }
+}
+
+function settDrawHouse(sx, sy, lv) {
+  const h = 16 + lv * 4;
+  const colors = [['#8d6e63','#6d4c41','#5d4037'], ['#a1887f','#795548','#6d4c41'], ['#bcaaa4','#8d6e63','#795548']][lv];
+  drawIsoBox(sx, sy, h, colors[0], colors[1], colors[2]);
+  // Roof
+  const roofCol = ['#c62828','#b71c1c','#d32f2f'][lv];
+  ctx.fillStyle = roofCol;
+  ctx.beginPath();
+  ctx.moveTo(sx, sy - h - 8 - lv * 2);
+  ctx.lineTo(sx + 18, sy - h + 2);
+  ctx.lineTo(sx, sy - h + 8);
+  ctx.lineTo(sx - 18, sy - h + 2);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffeb3b'; ctx.fillRect(sx + 2, sy - h + 5, 2 + lv, 2 + lv);
+  ctx.fillStyle = '#3e2723'; ctx.fillRect(sx - 2, sy - 5, 3, 6);
+}
+
+function settDrawFarm(sx, sy, lv) {
+  ctx.fillStyle = '#4e342e';
+  isoDiamondPath(sx, sy); ctx.fill();
+  ctx.fillStyle = '#66bb6a';
+  const rows = 5 + lv * 2;
+  for (let i = -rows; i < rows; i += 3) {
+    const wave = Math.sin(animFrame * 0.03 + i) * 0.5;
+    ctx.fillRect(sx + i, sy - 2 + wave, 1.5, 4 + lv);
+  }
+  if (lv >= 1) { drawIsoBox(sx + 12, sy - 3, 8, '#795548', '#5d4037', '#4e342e'); }
+  if (lv >= 2) { ctx.fillStyle = '#ffd54f'; ctx.beginPath(); ctx.arc(sx + 12, sy - 14, 2, 0, Math.PI * 2); ctx.fill(); }
+}
+
+function settDrawLumbermill(sx, sy, lv) {
+  const h = 14 + lv * 3;
+  drawIsoBox(sx, sy, h, '#795548', '#5d4037', '#4e342e');
+  // Saw blade
+  ctx.strokeStyle = '#90a4ae'; ctx.lineWidth = 1.5;
+  const angle = animFrame * 0.05;
+  ctx.beginPath(); ctx.arc(sx + 8, sy - h - 2, 4 + lv, angle, angle + Math.PI); ctx.stroke();
+  // Wood pile
+  if (lv >= 1) { ctx.fillStyle = '#8d6e63'; ctx.fillRect(sx - 12, sy - 3, 6, 3); ctx.fillRect(sx - 12, sy - 6, 6, 3); }
+  if (lv >= 2) { ctx.fillStyle = '#a1887f'; ctx.fillRect(sx - 12, sy - 9, 6, 3); }
+}
+
+function settDrawQuarry(sx, sy, lv) {
+  ctx.fillStyle = '#455a64';
+  isoDiamondPath(sx, sy); ctx.fill();
+  const blocks = 3 + lv * 2;
+  for (let i = 0; i < blocks; i++) {
+    const bx = sx - 10 + (i % 3) * 8, by = sy - 4 - Math.floor(i / 3) * 6;
+    ctx.fillStyle = i % 2 ? '#78909c' : '#607d8b';
+    ctx.fillRect(bx, by, 6, 5);
+  }
+  if (lv >= 2) { ctx.fillStyle = '#b0bec5'; ctx.beginPath(); ctx.arc(sx, sy - 16, 3, 0, Math.PI * 2); ctx.fill(); }
+}
+
+function settDrawMine(sx, sy, lv) {
+  drawIsoBox(sx, sy, 10, '#455a64', '#37474f', '#263238');
+  // Mine entrance
+  ctx.fillStyle = '#1a1a2e';
+  ctx.beginPath(); ctx.arc(sx, sy - 4, 5, Math.PI, 0); ctx.fill();
+  ctx.fillRect(sx - 5, sy - 4, 10, 4);
+  // Support beams
+  ctx.strokeStyle = '#795548'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(sx - 5, sy); ctx.lineTo(sx - 5, sy - 10); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(sx + 5, sy); ctx.lineTo(sx + 5, sy - 10); ctx.stroke();
+  if (lv >= 1) { ctx.strokeStyle = '#ffd54f'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sx - 5, sy - 10); ctx.lineTo(sx + 5, sy - 10); ctx.stroke(); }
+  if (lv >= 2) { ctx.fillStyle = '#ffd54f'; ctx.beginPath(); ctx.arc(sx, sy - 14, 2, 0, Math.PI * 2); ctx.fill(); }
+}
+
+function settDrawHuntingLodge(sx, sy, lv) {
+  const h = 12 + lv * 2;
+  drawIsoBox(sx, sy, h, '#6d4c41', '#5d4037', '#4e342e');
+  // Antler decoration
+  ctx.strokeStyle = '#bcaaa4'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(sx - 3, sy - h - 2); ctx.lineTo(sx - 6, sy - h - 8); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(sx + 3, sy - h - 2); ctx.lineTo(sx + 6, sy - h - 8); ctx.stroke();
+  if (lv >= 1) { ctx.fillStyle = '#ef5350'; ctx.beginPath(); ctx.arc(sx + 10, sy - 2, 2, 0, Math.PI * 2); ctx.fill(); }
+  if (lv >= 2) { ctx.fillStyle = '#ef5350'; ctx.beginPath(); ctx.arc(sx + 10, sy - 5, 2, 0, Math.PI * 2); ctx.fill(); }
+}
+
+function settDrawBarracks(sx, sy, lv) {
+  const h = 18 + lv * 4;
+  const colors = [['#37474f','#263238','#1a1a2e'], ['#455a64','#37474f','#263238'], ['#546e7a','#455a64','#37474f']][lv];
+  drawIsoBox(sx, sy, h, colors[0], colors[1], colors[2]);
+  // Flag
+  ctx.fillStyle = '#f44336';
+  ctx.fillRect(sx + 12, sy - h - 10, 8, 5);
+  ctx.strokeStyle = '#795548'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(sx + 12, sy - h - 12); ctx.lineTo(sx + 12, sy - h + 2); ctx.stroke();
+  if (lv >= 1) { ctx.fillStyle = '#ffd54f'; ctx.fillRect(sx + 14, sy - h - 9, 2, 3); }
+  if (lv >= 2) { ctx.fillStyle = '#ffd54f'; ctx.beginPath(); ctx.arc(sx + 16, sy - h - 7, 2, 0, Math.PI * 2); ctx.fill(); }
+}
+
+function settDrawWallSeg(sx, sy, lv) {
+  const h = 8 + lv * 5;
+  const colors = [['#795548','#5d4037','#4e342e'], ['#90a4ae','#78909c','#607d8b'], ['#607d8b','#546e7a','#455a64']][lv];
+  drawIsoBox(sx, sy, h, colors[0], colors[1], colors[2]);
+  if (lv >= 2) {
+    // Battlements
+    for (let i = -1; i <= 1; i++) {
+      ctx.fillStyle = colors[0];
+      ctx.fillRect(sx + i * 8, sy - h - 3, 4, 3);
+    }
+  }
+}
+
+function settDrawWatchtower(sx, sy, lv) {
+  const h = 24 + lv * 6;
+  drawIsoBox(sx, sy, h, '#5d4037', '#4e342e', '#3e2723');
+  // Platform
+  ctx.fillStyle = '#795548';
+  ctx.fillRect(sx - 10, sy - h - 2, 20, 3);
+  // Railing
+  ctx.strokeStyle = '#8d6e63'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(sx - 10, sy - h - 6); ctx.lineTo(sx - 10, sy - h - 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(sx + 10, sy - h - 6); ctx.lineTo(sx + 10, sy - h - 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(sx - 10, sy - h - 6); ctx.lineTo(sx + 10, sy - h - 6); ctx.stroke();
+  if (lv >= 1) {
+    // Torch
+    ctx.fillStyle = '#ff9800';
+    ctx.beginPath(); ctx.arc(sx, sy - h - 8, 2, 0, Math.PI * 2); ctx.fill();
+  }
+  if (lv >= 2) {
+    // Arrow slit
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(sx - 1, sy - h + 8, 2, 6);
+  }
+}
+
+function settDrawMarket(sx, sy, lv) {
+  // Stall
+  drawIsoBox(sx, sy, 10, '#795548', '#5d4037', '#4e342e');
+  // Canopy
+  const colors = ['#e53935', '#ff8f00', '#43a047'][lv];
+  ctx.fillStyle = colors;
+  ctx.beginPath();
+  ctx.moveTo(sx - 18, sy - 10);
+  ctx.lineTo(sx + 18, sy - 10);
+  ctx.lineTo(sx + 14, sy - 18);
+  ctx.lineTo(sx - 14, sy - 18);
+  ctx.closePath(); ctx.fill();
+  // Goods
+  if (lv >= 1) {
+    ctx.fillStyle = '#ffd54f'; ctx.beginPath(); ctx.arc(sx - 5, sy - 3, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#8d6e63'; ctx.fillRect(sx + 2, sy - 5, 3, 3);
+  }
+  if (lv >= 2) {
+    ctx.fillStyle = '#66bb6a'; ctx.beginPath(); ctx.arc(sx + 8, sy - 3, 2, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function settDrawBlacksmith(sx, sy, lv) {
+  const h = 16 + lv * 3;
+  drawIsoBox(sx, sy, h, '#424242', '#333', '#212121');
+  // Chimney smoke
+  ctx.fillStyle = 'rgba(150,150,150,0.3)';
+  const smokeY = sy - h - 6 - Math.sin(animFrame * 0.05) * 3;
+  ctx.beginPath(); ctx.arc(sx + 8, smokeY, 3 + lv, 0, Math.PI * 2); ctx.fill();
+  // Anvil
+  ctx.fillStyle = '#616161';
+  ctx.fillRect(sx - 3, sy - 5, 6, 3);
+  ctx.fillRect(sx - 1, sy - 8, 2, 3);
+  if (lv >= 1) { ctx.fillStyle = '#ff6f00'; ctx.beginPath(); ctx.arc(sx - 8, sy - 6, 2, 0, Math.PI * 2); ctx.fill(); }
+}
+
+function settDrawWarehouse(sx, sy, lv) {
+  const h = 14 + lv * 4;
+  drawIsoBox(sx, sy, h, '#6d4c41', '#5d4037', '#4e342e');
+  // Door
+  ctx.fillStyle = '#3e2723';
+  ctx.fillRect(sx - 4, sy - 6, 8, 8);
+  // Crates
+  const crates = 1 + lv;
+  for (let i = 0; i < crates; i++) {
+    ctx.fillStyle = '#8d6e63';
+    ctx.fillRect(sx + 10, sy - 3 - i * 5, 5, 4);
+  }
+}
+
+function settDrawHospital(sx, sy, lv) {
+  const h = 16 + lv * 3;
+  drawIsoBox(sx, sy, h, '#e0e0e0', '#bdbdbd', '#9e9e9e');
+  // Red cross
+  ctx.fillStyle = '#f44336';
+  ctx.fillRect(sx - 1, sy - h + 3, 3, 7);
+  ctx.fillRect(sx - 3, sy - h + 5, 7, 3);
+  if (lv >= 1) {
+    // Window
+    ctx.fillStyle = '#81d4fa';
+    ctx.fillRect(sx - 6, sy - h + 5, 2, 3);
+    ctx.fillRect(sx + 5, sy - h + 5, 2, 3);
+  }
+}
+
+function settDrawAcademy(sx, sy, lv) {
+  const h = 20 + lv * 4;
+  drawIsoBox(sx, sy, h, '#5c6bc0', '#3f51b5', '#303f9f');
+  // Columns
+  ctx.fillStyle = '#9fa8da';
+  ctx.fillRect(sx - 10, sy - 6, 2, 8);
+  ctx.fillRect(sx + 8, sy - 6, 2, 8);
+  // Book symbol
+  ctx.fillStyle = '#ffd54f'; ctx.font = (8 + lv * 2) + 'px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('📖', sx, sy - h + 8);
+}
+
+function settDrawTemple(sx, sy, lv) {
+  const h = 22 + lv * 5;
+  drawIsoBox(sx, sy, h, '#f5f5dc', '#e8e0c0', '#d4c99a');
+  // Spire
+  ctx.fillStyle = '#ffd54f';
+  ctx.beginPath();
+  ctx.moveTo(sx, sy - h - 10 - lv * 3);
+  ctx.lineTo(sx + 5, sy - h);
+  ctx.lineTo(sx - 5, sy - h);
+  ctx.closePath(); ctx.fill();
+  if (lv >= 1) {
+    ctx.fillStyle = '#ff9800';
+    ctx.beginPath(); ctx.arc(sx, sy - h - 4, 2, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function settDrawPort(sx, sy, lv) {
+  drawIsoBox(sx, sy, 10, '#795548', '#5d4037', '#4e342e');
+  // Dock extending toward water
+  ctx.fillStyle = '#8d6e63';
+  ctx.fillRect(sx + 10, sy - 2, 12, 3);
+  // Boat
+  if (lv >= 1) {
+    ctx.fillStyle = '#5d4037';
+    ctx.beginPath();
+    ctx.moveTo(sx + 16, sy - 6);
+    ctx.lineTo(sx + 24, sy - 4);
+    ctx.lineTo(sx + 16, sy - 2);
+    ctx.closePath(); ctx.fill();
+    // Sail
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.moveTo(sx + 18, sy - 6); ctx.lineTo(sx + 18, sy - 12); ctx.lineTo(sx + 22, sy - 6); ctx.closePath(); ctx.fill();
+  }
+  if (lv >= 2) {
+    ctx.fillStyle = '#ffd54f'; ctx.beginPath(); ctx.arc(sx + 18, sy - 14, 2, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+// --- UNIT DRAWING ---
+function settDrawUnit(sx, sy, unit) {
+  const udef = SETT_UNIT_TYPES[unit.type];
+  if (!udef) return;
+  ctx.fillStyle = udef.color;
+  // Body
+  ctx.beginPath(); ctx.arc(sx, sy - 8, 5, 0, Math.PI * 2); ctx.fill();
+  // Head
+  ctx.fillStyle = '#ffe0b2';
+  ctx.beginPath(); ctx.arc(sx, sy - 15, 3, 0, Math.PI * 2); ctx.fill();
+  // HP bar
+  const hpPct = unit.hp / unit.maxHp;
+  ctx.fillStyle = '#333'; ctx.fillRect(sx - 8, sy - 21, 16, 2);
+  ctx.fillStyle = hpPct > 0.5 ? '#4caf50' : (hpPct > 0.25 ? '#ff9800' : '#f44336');
+  ctx.fillRect(sx - 8, sy - 21, 16 * hpPct, 2);
+}
+
+// --- MINIMAP ---
+function settDrawMinimap() {
+  if (minimapDirty) {
+    mmCtx.fillStyle = '#080c12';
+    mmCtx.fillRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
+    // Determine bounds
+    const chunks = Object.values(sett.chunks);
+    if (chunks.length === 0) return;
+    let minCX = Infinity, maxCX = -Infinity, minCY = Infinity, maxCY = -Infinity;
+    for (const c of chunks) { minCX = Math.min(minCX, c.cx); maxCX = Math.max(maxCX, c.cx); minCY = Math.min(minCY, c.cy); maxCY = Math.max(maxCY, c.cy); }
+    const tilesW = (maxCX - minCX + 1) * SETT_CHUNK_SIZE;
+    const tilesH = (maxCY - minCY + 1) * SETT_CHUNK_SIZE;
+    const scale = Math.min(MINIMAP_SIZE / tilesW, MINIMAP_SIZE / tilesH);
+    const offX = minCX * SETT_CHUNK_SIZE;
+    const offY = minCY * SETT_CHUNK_SIZE;
+    for (let y = offY; y < offY + tilesH; y++) {
+      if (!fogMap[y]) continue;
+      for (let x = offX; x < offX + tilesW; x++) {
+        if (fogMap[y][x] === 0) continue;
+        const px = (x - offX) * scale;
+        const py = (y - offY) * scale;
+        if (waterMap[y] && waterMap[y][x]) mmCtx.fillStyle = '#1565c0';
+        else if (walls.has(k(x, y))) mmCtx.fillStyle = '#546e7a';
+        else if (territoryMap[y] && territoryMap[y][x] === 'player') mmCtx.fillStyle = '#2e7d32';
+        else mmCtx.fillStyle = '#1b5e20';
+        mmCtx.fillRect(px, py, Math.max(1, scale), Math.max(1, scale));
+      }
+    }
+    // Buildings
+    for (const b of sett.buildings) {
+      mmCtx.fillStyle = b.built ? '#ffd54f' : '#ff9800';
+      const px = (b.gx - offX) * scale;
+      const py = (b.gy - offY) * scale;
+      mmCtx.fillRect(px - 1, py - 1, 3, 3);
+    }
+    // Enemies
+    for (const e of enemies) {
+      if (fogMap[e.y] && fogMap[e.y][e.x] >= 1) {
+        mmCtx.fillStyle = '#f44336';
+        mmCtx.fillRect((e.x - offX) * scale - 1, (e.y - offY) * scale - 1, 2, 2);
+      }
+    }
+    // Player
+    mmCtx.fillStyle = '#fff';
+    mmCtx.fillRect((player.x - offX) * scale - 2, (player.y - offY) * scale - 2, 4, 4);
+    minimapDirty = false;
+  }
+  // Draw minimap to main canvas
+  const mmX = W - MINIMAP_SIZE - 8;
+  const mmY = 8;
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = '#0a0e14';
+  ctx.fillRect(mmX - 2, mmY - 2, MINIMAP_SIZE + 4, MINIMAP_SIZE + 4);
+  ctx.drawImage(minimapCanvas, mmX, mmY);
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = '#3a4a6a';
+  ctx.strokeRect(mmX - 2, mmY - 2, MINIMAP_SIZE + 4, MINIMAP_SIZE + 4);
+}
+
+// --- BOTTOM PANEL ---
+function settDrawBottomPanel() {
+  const panelY = H - PANEL_H;
+  const panelGrad = ctx.createLinearGradient(0, panelY, 0, panelY + PANEL_H);
+  panelGrad.addColorStop(0, '#1a2218');
+  panelGrad.addColorStop(1, '#0a1208');
+  ctx.fillStyle = panelGrad;
+  ctx.fillRect(0, panelY, W, PANEL_H);
+  ctx.fillStyle = '#2a5a2e'; ctx.fillRect(0, panelY, W, 1);
+  // Notifications
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'left';
+  const recent = sett.notifications.slice(-3);
+  for (let i = 0; i < recent.length; i++) {
+    ctx.fillStyle = recent[i].color;
+    ctx.fillText(recent[i].text, 10, panelY + 15 + i * 14);
+  }
+  // Build mode
+  if (sett.buildMode && sett.buildSelected) {
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ffd54f'; ctx.font = '12px sans-serif';
+    ctx.fillText('Placing: ' + SETT_BUILDING_DEFS[sett.buildSelected].name + '  (ESC to cancel)', W - 10, panelY + 20);
+  }
+  // Turn counter
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#556'; ctx.font = '10px sans-serif';
+  ctx.fillText('Turn ' + sett.turnCount, W - 10, panelY + PANEL_H - 6);
+}
+
+// ═══════════════════════════════════════════
 //  ANIMATION LOOP & INPUT
 // ═══════════════════════════════════════════
 function gameLoop() {
   animFrame++;
 
-  // Engineer passive crafting timer (every 5 min per engineer → +1 ATK, cap 10)
-  if (recruitedEngineers > 0 && engineerATKBonus < 10) {
+  // Engineer passive crafting timer (every 5 min per engineer → +1 ATK, cap 10) — conquerers only
+  if (appMode === 'conquerers' && recruitedEngineers > 0 && engineerATKBonus < 10) {
     engineerTimer++;
     const interval = Math.floor(18000 / recruitedEngineers); // 5 min / num engineers
     if (engineerTimer >= interval) {
@@ -5592,12 +7340,22 @@ function gameLoop() {
   }
 
   try {
-    if (gameMode === 'overworld') {
-      updateSmooth();
-      draw();
+    if (appMode === 'settlers' && sett) {
+      if (gameMode === 'overworld') {
+        settUpdateSmooth();
+        settDraw();
+      } else {
+        updateBattleSmooth();
+        drawBattle();
+      }
     } else {
-      updateBattleSmooth();
-      drawBattle();
+      if (gameMode === 'overworld') {
+        updateSmooth();
+        draw();
+      } else {
+        updateBattleSmooth();
+        drawBattle();
+      }
     }
   } catch (err) {
     console.error('Game loop error:', err);
@@ -5663,21 +7421,51 @@ document.getElementById('overlayInput').addEventListener('keydown', e => {
 
 document.addEventListener('keydown', e => {
   if (document.getElementById('overlay').classList.contains('show')) return;
-  if (gameMode === 'overworld') {
-    switch (e.key) {
-      case 'ArrowUp': case 'w': case 'W': e.preventDefault(); tryMove(0, -1); break;
-      case 'ArrowDown': case 's': case 'S': e.preventDefault(); tryMove(0, 1); break;
-      case 'ArrowLeft': case 'a': case 'A': e.preventDefault(); tryMove(-1, 0); break;
-      case 'ArrowRight': case 'd': case 'D': e.preventDefault(); tryMove(1, 0); break;
+  if (appMode === 'settlers' && sett) {
+    if (gameMode === 'overworld') {
+      switch (e.key) {
+        case 'ArrowUp': case 'w': case 'W': e.preventDefault(); settTryMove(0, -1); break;
+        case 'ArrowDown': case 's': case 'S': e.preventDefault(); settTryMove(0, 1); break;
+        case 'ArrowLeft': case 'a': case 'A': e.preventDefault(); settTryMove(-1, 0); break;
+        case 'ArrowRight': case 'd': case 'D': e.preventDefault(); settTryMove(1, 0); break;
+        case 'Escape': if (sett.buildMode) { sett.buildMode = false; sett.buildSelected = null; msg(''); } break;
+        case 'b': case 'B': settToggleBuildMenu(); break;
+      }
+    } else if (gameMode === 'battle') {
+      if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); battle.simPaused = !battle.simPaused; }
+      if (e.key === '1') { battle.simSpeed = 1; battle.simPaused = false; }
+      if (e.key === '2') { battle.simSpeed = 2; battle.simPaused = false; }
+      if (e.key === '3') { battle.simSpeed = 4; battle.simPaused = false; }
+    } else if (gameMode === 'deploy') {
+      if (e.key === 'Escape') { e.preventDefault(); cancelDeploy(); }
     }
-  } else if (gameMode === 'battle') {
-    if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); battle.simPaused = !battle.simPaused; }
-    if (e.key === '1') { battle.simSpeed = 1; battle.simPaused = false; }
-    if (e.key === '2') { battle.simSpeed = 2; battle.simPaused = false; }
-    if (e.key === '3') { battle.simSpeed = 4; battle.simPaused = false; }
-  } else if (gameMode === 'deploy') {
-    if (e.key === 'Escape') { e.preventDefault(); cancelDeploy(); }
+  } else {
+    if (gameMode === 'overworld') {
+      switch (e.key) {
+        case 'ArrowUp': case 'w': case 'W': e.preventDefault(); tryMove(0, -1); break;
+        case 'ArrowDown': case 's': case 'S': e.preventDefault(); tryMove(0, 1); break;
+        case 'ArrowLeft': case 'a': case 'A': e.preventDefault(); tryMove(-1, 0); break;
+        case 'ArrowRight': case 'd': case 'D': e.preventDefault(); tryMove(1, 0); break;
+      }
+    } else if (gameMode === 'battle') {
+      if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); battle.simPaused = !battle.simPaused; }
+      if (e.key === '1') { battle.simSpeed = 1; battle.simPaused = false; }
+      if (e.key === '2') { battle.simSpeed = 2; battle.simPaused = false; }
+      if (e.key === '3') { battle.simSpeed = 4; battle.simPaused = false; }
+    } else if (gameMode === 'deploy') {
+      if (e.key === 'Escape') { e.preventDefault(); cancelDeploy(); }
+    }
   }
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (appMode !== 'settlers' || !sett || !sett.buildMode) return;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width, scaleY = H / rect.height;
+  const mx2 = (e.clientX - rect.left) * scaleX;
+  const my2 = (e.clientY - rect.top) * scaleY;
+  const grid = fromIso(mx2, my2);
+  sett.buildGhost = { gx: grid.x, gy: grid.y };
 });
 
 canvas.addEventListener('click', e => {
@@ -5687,7 +7475,34 @@ canvas.addEventListener('click', e => {
   const mx = (e.clientX - rect.left) * scaleX;
   const my = (e.clientY - rect.top) * scaleY;
 
-  if (gameMode === 'overworld') {
+  if (appMode === 'settlers' && sett && gameMode === 'overworld') {
+    if (my >= H - PANEL_H) return;
+    const grid = fromIso(mx, my);
+    if (grid.x < 0 || grid.y < 0) return;
+    if (!grassMap[grid.y] || grassMap[grid.y][grid.x] === undefined) return;
+    // Update build ghost for visual feedback
+    if (sett.buildMode && sett.buildSelected) {
+      if (settCanBuild(sett.buildSelected, grid.x, grid.y)) {
+        settPlaceBuilding(sett.buildSelected, grid.x, grid.y);
+        settUpdateHUD();
+      } else {
+        msg('Cannot build here!');
+      }
+      sett.buildMode = false;
+      sett.buildSelected = null;
+      return;
+    }
+    // Check if clicking on own building
+    const clickedBld = sett.buildings.find(b => b.gx === grid.x && b.gy === grid.y && b.built);
+    if (clickedBld) {
+      settShowBuildingInfo(clickedBld.id);
+      return;
+    }
+    const dx = Math.sign(grid.x - player.x), dy = Math.sign(grid.y - player.y);
+    if (dx === 0 && dy === 0) return;
+    if (Math.abs(grid.x - player.x) >= Math.abs(grid.y - player.y)) settTryMove(dx, 0);
+    else settTryMove(0, dy);
+  } else if (gameMode === 'overworld') {
     if (my >= H - PANEL_H) return;
     const grid = fromIso(mx, my);
     if (grid.x < 0 || grid.x >= COLS || grid.y < 0 || grid.y >= ROWS) return;
@@ -5708,12 +7523,15 @@ canvas.addEventListener('click', e => {
 const _existingSaves = getSaves();
 const _hasAutoSave = !!_existingSaves.slot0;
 const _hasSaves = Object.keys(_existingSaves).length > 0;
-if (_hasSaves) {
-  // Offer load or new game
+const _settSaves = settGetSaves();
+const _hasSettSaves = Object.keys(_settSaves).length > 0;
+if (_hasSaves || _hasSettSaves) {
   let html = '<div style="text-align:center;font-family:sans-serif;">';
-  html += '<p style="color:#aaa;margin:4px 0">Saved games found!</p>';
-  html += '<button onclick="showSaveLoadUI()" style="padding:6px 16px;margin:4px;font-size:13px">Load Game</button>';
-  html += '<button onclick="document.getElementById(\'overlay\').classList.remove(\'show\');showOverlay(\'CONQUERERS\',\'Enter your name, commander.\',\'Start Game\',()=>newGame(),true)" style="padding:6px 16px;margin:4px;font-size:13px">New Game</button>';
+  html += '<p style="color:#aaa;margin:4px 0">Welcome, Commander!</p>';
+  if (_hasSaves) html += '<button onclick="showSaveLoadUI()" style="padding:6px 16px;margin:4px;font-size:13px">Load Conquest</button>';
+  html += '<button onclick="document.getElementById(\'overlay\').classList.remove(\'show\');showOverlay(\'CONQUERERS\',\'Enter your name, commander.\',\'Start Game\',()=>newGame(),true)" style="padding:6px 16px;margin:4px;font-size:13px">New Conquest</button>';
+  if (_hasSettSaves) html += '<button onclick="settShowSaveLoadUI()" style="padding:6px 16px;margin:4px;font-size:13px;background:linear-gradient(180deg,#1a3a1a 0%,#0e1a0e 100%);color:#81c784;border:1px solid #2e5a32">Load Settlement</button>';
+  html += '<button onclick="startSettlersMode()" style="padding:6px 16px;margin:4px;font-size:13px;background:linear-gradient(180deg,#1a3a1a 0%,#0e1a0e 100%);color:#81c784;border:1px solid #2e5a32">New Settlement</button>';
   html += '</div>';
   document.getElementById('overlayTitle').textContent = 'CONQUERERS';
   document.getElementById('overlayTitle').style.color = '#f0c040';
@@ -5723,7 +7541,18 @@ if (_hasSaves) {
   document.getElementById('overlay').classList.add('show');
   overlayCallback = () => { document.getElementById('overlayBtn').style.display = ''; document.getElementById('overlayMsg').innerHTML = ''; };
 } else {
-  showOverlay('CONQUERERS', 'Enter your name, commander.', 'Start Game', () => newGame(), true);
+  let html = '<div style="text-align:center;font-family:sans-serif;">';
+  html += '<p style="color:#aaa;margin:4px 0">Choose your mode:</p>';
+  html += '<button onclick="document.getElementById(\'overlay\').classList.remove(\'show\');showOverlay(\'CONQUERERS\',\'Enter your name, commander.\',\'Start Game\',()=>newGame(),true)" style="padding:6px 16px;margin:4px;font-size:13px">Conquest Mode</button>';
+  html += '<button onclick="startSettlersMode()" style="padding:6px 16px;margin:4px;font-size:13px;background:linear-gradient(180deg,#1a3a1a 0%,#0e1a0e 100%);color:#81c784;border:1px solid #2e5a32">Settlers Mode</button>';
+  html += '</div>';
+  document.getElementById('overlayTitle').textContent = 'CONQUERERS';
+  document.getElementById('overlayTitle').style.color = '#f0c040';
+  document.getElementById('overlayMsg').innerHTML = html;
+  document.getElementById('overlayBtn').style.display = 'none';
+  document.getElementById('overlayInput').style.display = 'none';
+  document.getElementById('overlay').classList.add('show');
+  overlayCallback = () => {};
 }
 gameLoop();
 </script>
