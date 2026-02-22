@@ -5699,6 +5699,14 @@ const SETT_BUILDING_DEFS = {
       { cost: { wood: 45, stone: 25, iron: 10 }, buildTime: 10, production: { meat: 8 } },
     ]
   },
+  blacksmith: {
+    name: 'Blacksmith', category: 'production', workers: 2, requiresAdj: null,
+    levels: [
+      { cost: { wood: 15, stone: 10, iron: 5 }, buildTime: 6, toolBonus: 1 },
+      { cost: { wood: 25, stone: 18, iron: 12 }, buildTime: 8, toolBonus: 2 },
+      { cost: { wood: 40, stone: 28, iron: 20 }, buildTime: 10, toolBonus: 3 },
+    ]
+  },
 };
 
 // Tech tree
@@ -5994,6 +6002,13 @@ function settDemolish(buildingId) {
 // --- SETTLERS RESOURCE SYSTEM ---
 function settResourceTick() {
   const techBoost = sett.researched.improvedTools ? 1.25 : 1;
+  // Blacksmith tool bonus: boosts farms and mines
+  let toolBonus = 0;
+  const smithy = sett.buildings.find(b => b.type === 'blacksmith' && b.built && !b.upgrading && b.workers > 0);
+  if (smithy) {
+    const smithEff = Math.min(1, smithy.workers / SETT_BUILDING_DEFS.blacksmith.workers);
+    toolBonus = Math.floor(SETT_BUILDING_DEFS.blacksmith.levels[smithy.level].toolBonus * smithEff);
+  }
   for (const b of sett.buildings) {
     if (!b.built || b.upgrading) continue;
     const def = SETT_BUILDING_DEFS[b.type];
@@ -6002,6 +6017,10 @@ function settResourceTick() {
     const efficiency = Math.min(1, b.workers / def.workers);
     for (const [res, rate] of Object.entries(lv.production)) {
       let produced = Math.floor(rate * efficiency * techBoost);
+      // Blacksmith tools boost farms and mines
+      if (toolBonus > 0 && (b.type === 'farm' || b.type === 'mine' || b.type === 'quarry' || b.type === 'lumbermill')) {
+        produced += toolBonus;
+      }
       if (res === 'crops' && sett.researched.advancedFarming) produced += 2;
       if (res === 'gold' && sett.researched.economics) produced += 1;
       sett.resources[res] = Math.min(sett.storageCap[res], sett.resources[res] + produced);
@@ -6346,6 +6365,11 @@ function settShowBuildingInfo(buildingId) {
         html += Math.floor(rate * eff) + ' ' + SETT_RESOURCE_DEFS[res].name + '/turn ';
       }
       html += '</div>';
+    }
+    // Blacksmith: show tool bonus info
+    if (b.type === 'blacksmith') {
+      const tb = lv.toolBonus || 0;
+      html += '<div style="color:#ff9800;font-size:11px;margin-top:4px">Tool Bonus: +' + tb + ' production to farms, mines, quarries & lumbermills</div>';
     }
     // Market: trade
     if (b.type === 'market') {
@@ -7047,6 +7071,7 @@ function settDrawBuildingByType(sx, sy, type, level) {
     case 'academy': settDrawAcademy(sx, sy, level); break;
     case 'temple': settDrawTemple(sx, sy, level); break;
     case 'port': settDrawPort(sx, sy, level); break;
+    case 'blacksmith': settDrawBlacksmith(sx, sy, level); break;
     default: drawIsoBox(sx, sy, 14, '#888', '#666', '#555'); break;
   }
 }
@@ -7255,7 +7280,64 @@ function settDrawPort(sx, sy, lv) {
   }
 }
 
-// --- UNIT DRAWING ---
+function settDrawBlacksmith(sx, sy, lv) {
+  const h = 16 + lv * 3;
+  const colors = [['#5d4037','#4e342e','#3e2723'], ['#6d4c41','#5d4037','#4e342e'], ['#795548','#6d4c41','#5d4037']][lv];
+  drawIsoBox(sx, sy, h, colors[0], colors[1], colors[2]);
+  // Chimney
+  ctx.fillStyle = '#4e342e';
+  ctx.fillRect(sx + 8, sy - h - 8, 4, 10);
+  // Smoke puffs (animated)
+  ctx.fillStyle = 'rgba(180,180,180,0.25)';
+  const smokeT = animFrame * 0.04;
+  ctx.beginPath(); ctx.arc(sx + 10, sy - h - 10 - Math.sin(smokeT) * 3, 3 + lv * 0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(150,150,150,0.15)';
+  ctx.beginPath(); ctx.arc(sx + 9, sy - h - 16 - Math.sin(smokeT + 1) * 2, 2 + lv * 0.5, 0, Math.PI * 2); ctx.fill();
+  // Forge glow (window/opening)
+  ctx.fillStyle = 'rgba(255,100,0,0.5)';
+  ctx.fillRect(sx - 4, sy - 6, 4, 4);
+  ctx.fillStyle = 'rgba(255,160,0,0.3)';
+  ctx.fillRect(sx - 5, sy - 7, 6, 6);
+  // Anvil
+  ctx.fillStyle = '#424242';
+  ctx.fillRect(sx + 2, sy - 4, 5, 2);
+  ctx.fillRect(sx + 3, sy - 7, 3, 3);
+  ctx.fillStyle = '#555';
+  ctx.fillRect(sx + 3, sy - 7, 2, 1);
+  // Hammer resting on anvil
+  ctx.fillStyle = '#6d4c41';
+  ctx.fillRect(sx + 6, sy - 9, 1.5, 5);
+  ctx.fillStyle = '#757575';
+  ctx.fillRect(sx + 5, sy - 10, 3.5, 2);
+  // Tool rack (shows level progression)
+  if (lv >= 1) {
+    // Hanging tools on wall
+    ctx.strokeStyle = '#8d6e63'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(sx - 8, sy - h + 3); ctx.lineTo(sx - 2, sy - h + 3); ctx.stroke();
+    // Tools: pickaxe, sickle
+    ctx.fillStyle = '#9e9e9e';
+    ctx.fillRect(sx - 7, sy - h + 3, 1, 4);
+    ctx.fillRect(sx - 7, sy - h + 3, 3, 1);
+    ctx.fillRect(sx - 4, sy - h + 3, 1, 4);
+    ctx.beginPath(); ctx.arc(sx - 3, sy - h + 5, 1.5, 0, Math.PI); ctx.stroke();
+  }
+  if (lv >= 2) {
+    // Extra bellows detail
+    ctx.fillStyle = '#5d4037';
+    ctx.beginPath();
+    ctx.moveTo(sx - 8, sy - 5);
+    ctx.lineTo(sx - 12, sy - 3);
+    ctx.lineTo(sx - 12, sy - 7);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#4e342e';
+    ctx.fillRect(sx - 12, sy - 6, 1, 2);
+    // Sparks from forge
+    ctx.fillStyle = '#ffab00';
+    ctx.beginPath(); ctx.arc(sx - 2, sy - 8, 1, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx - 4, sy - 9, 0.7, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
 // --- MINIMAP ---
 function settDrawMinimap() {
   if (minimapDirty) {
