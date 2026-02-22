@@ -6812,6 +6812,371 @@ function settGetVisibleRange() {
   };
 }
 
+function settDrawPlayer(sx, sy) {
+  const cx = sx, cy = sy;
+  const bob = Math.sin(animFrame * 0.1) * 1.5;
+
+  // Warm amber glow aura
+  const glowPulse = 0.12 + Math.sin(animFrame * 0.06) * 0.05;
+  const glowOuter = ctx.createRadialGradient(cx, cy, 4, cx, cy, 36);
+  glowOuter.addColorStop(0, 'rgba(230,160,60,' + (glowPulse + 0.04) + ')');
+  glowOuter.addColorStop(0.3, 'rgba(200,130,40,' + (glowPulse * 0.6) + ')');
+  glowOuter.addColorStop(0.6, 'rgba(160,100,30,' + (glowPulse * 0.25) + ')');
+  glowOuter.addColorStop(1, 'rgba(120,80,20,0)');
+  ctx.fillStyle = glowOuter;
+  ctx.fillRect(cx - 42, cy - 42, 84, 84);
+
+  // Ground ellipse ring
+  ctx.strokeStyle = 'rgba(230,160,60,0.2)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(cx, cy + 4, 18, 8, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(230,160,60,0.35)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.ellipse(cx, cy + 4, 14, 6, 0, 0, Math.PI * 2); ctx.stroke();
+  // Drop shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.beginPath(); ctx.ellipse(cx + 3, cy + 6, 12, 4.5, 0.2, 0, Math.PI * 2); ctx.fill();
+
+  const by = cy - 10 + bob;
+
+  // === LUMBERJACK ===
+
+  // Work boots - heavy brown leather
+  const bootLGrad = ctx.createLinearGradient(cx - 7, by + 11, cx - 1, by + 15);
+  bootLGrad.addColorStop(0, '#5a3a1e'); bootLGrad.addColorStop(0.5, '#4a2e16'); bootLGrad.addColorStop(1, '#3a2410');
+  ctx.fillStyle = bootLGrad;
+  ctx.fillRect(cx - 7, by + 11, 6, 4);
+  const bootRGrad = ctx.createLinearGradient(cx + 1, by + 11, cx + 7, by + 15);
+  bootRGrad.addColorStop(0, '#5a3a1e'); bootRGrad.addColorStop(0.5, '#4a2e16'); bootRGrad.addColorStop(1, '#3a2410');
+  ctx.fillStyle = bootRGrad;
+  ctx.fillRect(cx + 1, by + 11, 6, 4);
+  // Thick rubber soles
+  ctx.fillStyle = '#1a1410'; ctx.fillRect(cx - 8, by + 14, 7, 2); ctx.fillRect(cx, by + 14, 7, 2);
+  // Tread pattern
+  ctx.fillStyle = '#2a2018';
+  for (let t = 0; t < 3; t++) { ctx.fillRect(cx - 7 + t * 2, by + 14.5, 1, 0.8); ctx.fillRect(cx + 1 + t * 2, by + 14.5, 1, 0.8); }
+  // Boot leather highlights
+  ctx.fillStyle = 'rgba(255,220,180,0.1)';
+  ctx.fillRect(cx - 6, by + 11, 4, 1); ctx.fillRect(cx + 2, by + 11, 4, 1);
+  // Boot lacing (simple cross pattern)
+  ctx.strokeStyle = '#7a5a30'; ctx.lineWidth = 0.4;
+  for (let l = 0; l < 3; l++) {
+    const ly = by + 11.5 + l * 1;
+    ctx.beginPath(); ctx.moveTo(cx - 5.5, ly); ctx.lineTo(cx - 3, ly + 0.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - 3, ly); ctx.lineTo(cx - 5.5, ly + 0.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + 2.5, ly); ctx.lineTo(cx + 5, ly + 0.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + 5, ly); ctx.lineTo(cx + 2.5, ly + 0.5); ctx.stroke();
+  }
+  // Boot tongue
+  ctx.fillStyle = '#6a4a28'; ctx.fillRect(cx - 5, by + 11, 2, 0.8); ctx.fillRect(cx + 3, by + 11, 2, 0.8);
+  // Steel toe cap hint
+  ctx.fillStyle = 'rgba(100,100,100,0.15)'; ctx.fillRect(cx - 7, by + 13.5, 5, 0.8); ctx.fillRect(cx + 1, by + 13.5, 5, 0.8);
+
+  // Legs - dark blue denim jeans
+  const legLGrad = ctx.createLinearGradient(cx - 7, by + 3, cx - 1, by + 11);
+  legLGrad.addColorStop(0, '#2a3a5a'); legLGrad.addColorStop(0.5, '#243252'); legLGrad.addColorStop(1, '#1e2a48');
+  ctx.fillStyle = legLGrad;
+  ctx.fillRect(cx - 7, by + 3, 6, 9);
+  const legRGrad = ctx.createLinearGradient(cx + 1, by + 3, cx + 7, by + 11);
+  legRGrad.addColorStop(0, '#283856'); legRGrad.addColorStop(0.5, '#223050'); legRGrad.addColorStop(1, '#1e2a48');
+  ctx.fillStyle = legRGrad;
+  ctx.fillRect(cx + 1, by + 3, 6, 9);
+  // Denim fade highlights
+  ctx.fillStyle = 'rgba(120,140,180,0.08)';
+  ctx.fillRect(cx - 5, by + 5, 3, 4); ctx.fillRect(cx + 2, by + 5, 3, 4);
+  // Knee wear patches
+  ctx.fillStyle = 'rgba(140,160,200,0.1)';
+  ctx.fillRect(cx - 6, by + 6, 4, 2); ctx.fillRect(cx + 2, by + 6, 4, 2);
+  // Denim seam (outseam)
+  ctx.strokeStyle = 'rgba(80,90,110,0.3)'; ctx.lineWidth = 0.4;
+  ctx.beginPath(); ctx.moveTo(cx - 7, by + 3); ctx.lineTo(cx - 7, by + 11); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx + 7, by + 3); ctx.lineTo(cx + 7, by + 11); ctx.stroke();
+  // Belt - thick brown leather
+  ctx.fillStyle = '#4a3018'; ctx.fillRect(cx - 7, by + 3, 14, 1.8);
+  // Belt buckle (brass, rectangular)
+  ctx.fillStyle = '#b8962e'; ctx.fillRect(cx - 1.5, by + 3.1, 3, 1.6);
+  ctx.fillStyle = '#d4ae3a'; ctx.fillRect(cx - 1, by + 3.3, 2, 1.2);
+  ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(cx - 0.8, by + 3.4, 1, 0.5);
+
+  // Suspenders (visible over shirt)
+  ctx.fillStyle = '#8b1a1a';
+  ctx.fillRect(cx - 5, by - 6, 1.8, 10); ctx.fillRect(cx + 3.5, by - 6, 1.8, 10);
+  // Suspender clips at belt
+  ctx.fillStyle = '#888'; ctx.fillRect(cx - 5, by + 3, 1.8, 1); ctx.fillRect(cx + 3.5, by + 3, 1.8, 1);
+  // Suspender highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx.fillRect(cx - 4.8, by - 4, 1.2, 5); ctx.fillRect(cx + 3.8, by - 4, 1.2, 5);
+
+  // Body - red and black plaid flannel shirt
+  const bodyGrad = ctx.createLinearGradient(cx - 9, by - 7, cx + 9, by + 5);
+  bodyGrad.addColorStop(0, '#a82020'); bodyGrad.addColorStop(0.3, '#921a1a'); bodyGrad.addColorStop(0.6, '#801515'); bodyGrad.addColorStop(1, '#6e1010');
+  ctx.fillStyle = bodyGrad;
+  ctx.fillRect(cx - 9, by - 7, 18, 13);
+  // Plaid pattern - horizontal black stripes
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  for (let py = 0; py < 5; py++) {
+    ctx.fillRect(cx - 9, by - 6 + py * 3, 18, 1.2);
+  }
+  // Plaid pattern - vertical black stripes
+  for (let px = 0; px < 5; px++) {
+    ctx.fillRect(cx - 8 + px * 3.5, by - 7, 1.2, 13);
+  }
+  // Plaid cross highlights (where stripes intersect = darker)
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  for (let py = 0; py < 5; py++) {
+    for (let px = 0; px < 5; px++) {
+      ctx.fillRect(cx - 8 + px * 3.5, by - 6 + py * 3, 1.2, 1.2);
+    }
+  }
+  // Body directional lighting
+  ctx.fillStyle = 'rgba(255,200,150,0.08)';
+  ctx.fillRect(cx - 8, by - 7, 9, 5);
+  ctx.fillStyle = 'rgba(0,0,0,0.1)';
+  ctx.fillRect(cx + 2, by + 1, 6, 5);
+  // Shirt collar (open, showing undershirt)
+  ctx.fillStyle = '#801515'; ctx.fillRect(cx - 4, by - 7, 8, 2);
+  // Collar fold left
+  ctx.fillStyle = '#a82020';
+  ctx.beginPath(); ctx.moveTo(cx - 4, by - 7); ctx.lineTo(cx - 2, by - 5.5); ctx.lineTo(cx - 4, by - 5.5); ctx.closePath(); ctx.fill();
+  // Collar fold right
+  ctx.beginPath(); ctx.moveTo(cx + 4, by - 7); ctx.lineTo(cx + 2, by - 5.5); ctx.lineTo(cx + 4, by - 5.5); ctx.closePath(); ctx.fill();
+  // Undershirt visible at collar
+  ctx.fillStyle = '#e8ddd0'; ctx.fillRect(cx - 2, by - 7, 4, 1.5);
+  // Button line down front
+  ctx.fillStyle = '#c8b898';
+  for (let b = 0; b < 4; b++) {
+    ctx.beginPath(); ctx.arc(cx, by - 4 + b * 2.5, 0.5, 0, Math.PI * 2); ctx.fill();
+  }
+  // Chest pocket (left)
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 0.4;
+  ctx.strokeRect(cx - 7, by - 4, 3.5, 2.5);
+  ctx.fillStyle = 'rgba(0,0,0,0.05)'; ctx.fillRect(cx - 7, by - 4, 3.5, 2.5);
+  // Pocket flap
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 0.3;
+  ctx.beginPath(); ctx.moveTo(cx - 7, by - 4); ctx.lineTo(cx - 3.5, by - 4); ctx.stroke();
+
+  // Arms - flannel sleeves (rolled up to forearms)
+  const armLGrad = ctx.createLinearGradient(cx - 13, by - 4, cx - 8, by + 2);
+  armLGrad.addColorStop(0, '#a82020'); armLGrad.addColorStop(0.5, '#921a1a'); armLGrad.addColorStop(1, '#801515');
+  ctx.fillStyle = armLGrad;
+  ctx.fillRect(cx - 13, by - 4, 5, 7);
+  const armRGrad = ctx.createLinearGradient(cx + 8, by - 4, cx + 13, by + 2);
+  armRGrad.addColorStop(0, '#921a1a'); armRGrad.addColorStop(0.5, '#801515'); armRGrad.addColorStop(1, '#6e1010');
+  ctx.fillStyle = armRGrad;
+  ctx.fillRect(cx + 8, by - 4, 5, 7);
+  // Sleeve plaid pattern
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(cx - 13, by - 2, 5, 1); ctx.fillRect(cx - 13, by + 1, 5, 1);
+  ctx.fillRect(cx + 8, by - 2, 5, 1); ctx.fillRect(cx + 8, by + 1, 5, 1);
+  ctx.fillRect(cx - 11.5, by - 4, 1, 7); ctx.fillRect(cx + 10, by - 4, 1, 7);
+  // Rolled sleeve cuff (showing inside flannel - lighter)
+  ctx.fillStyle = '#c83030'; ctx.fillRect(cx - 13, by + 2, 5, 1.5); ctx.fillRect(cx + 8, by + 2, 5, 1.5);
+  ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(cx - 12.5, by + 2, 4, 0.5); ctx.fillRect(cx + 8.5, by + 2, 4, 0.5);
+  // Forearms (bare skin, muscular)
+  const skinGrad = ctx.createLinearGradient(cx - 13, by + 3, cx - 9, by + 7);
+  skinGrad.addColorStop(0, '#d4b494'); skinGrad.addColorStop(1, '#c8a882');
+  ctx.fillStyle = skinGrad;
+  ctx.fillRect(cx - 13, by + 3.5, 5, 3.5);
+  ctx.fillStyle = '#c8a882';
+  ctx.fillRect(cx + 8, by + 3.5, 5, 3.5);
+  // Forearm hair detail
+  ctx.fillStyle = 'rgba(80,50,20,0.1)';
+  ctx.fillRect(cx - 12, by + 4, 3, 2); ctx.fillRect(cx + 9, by + 4, 3, 2);
+  // Work gloves (leather)
+  ctx.fillStyle = '#8a6a3a'; ctx.fillRect(cx - 13, by + 7, 4, 2); ctx.fillRect(cx + 9, by + 7, 4, 2);
+  ctx.fillStyle = '#7a5a2a'; ctx.fillRect(cx - 13, by + 7, 4, 0.5); ctx.fillRect(cx + 9, by + 7, 4, 0.5);
+  // Glove fingers
+  ctx.fillStyle = '#8a6a3a';
+  ctx.fillRect(cx - 13, by + 8, 1.2, 1); ctx.fillRect(cx - 11.5, by + 8, 1.2, 1); ctx.fillRect(cx - 10, by + 8, 1.2, 1);
+  ctx.fillRect(cx + 9, by + 8, 1.2, 1); ctx.fillRect(cx + 10.5, by + 8, 1.2, 1); ctx.fillRect(cx + 12, by + 8, 1.2, 1);
+  // Glove stitching
+  ctx.strokeStyle = 'rgba(100,80,40,0.3)'; ctx.lineWidth = 0.3;
+  ctx.beginPath(); ctx.moveTo(cx - 12, by + 7.5); ctx.lineTo(cx - 10, by + 7.5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx + 10, by + 7.5); ctx.lineTo(cx + 12, by + 7.5); ctx.stroke();
+
+  // AXE (held in right hand, extends left)
+  // Axe handle (wooden, long)
+  const handleGrad = ctx.createLinearGradient(cx - 18, by - 3, cx + 10, by + 6);
+  handleGrad.addColorStop(0, '#8a6030'); handleGrad.addColorStop(0.3, '#7a5028'); handleGrad.addColorStop(0.7, '#6a4420'); handleGrad.addColorStop(1, '#5a3818');
+  ctx.fillStyle = handleGrad;
+  // Handle shaft (diagonal from left-low to right-high going through hands)
+  ctx.save();
+  ctx.translate(cx, by + 2);
+  ctx.rotate(-0.3);
+  ctx.fillRect(-20, -1, 28, 2.5);
+  // Wood grain on handle
+  ctx.strokeStyle = 'rgba(60,30,10,0.15)'; ctx.lineWidth = 0.3;
+  for (let g = 0; g < 8; g++) {
+    ctx.beginPath(); ctx.moveTo(-18 + g * 3.5, -0.5); ctx.lineTo(-18 + g * 3.5, 1.5); ctx.stroke();
+  }
+  // Handle grip wrapping (leather)
+  ctx.fillStyle = '#5a3818';
+  for (let w = 0; w < 4; w++) {
+    ctx.fillRect(2 + w * 2, -1, 1, 2.5);
+  }
+  // Axe head (steel, double-sided for lumberjack)
+  const axeHeadGrad = ctx.createLinearGradient(-22, -6, -16, 6);
+  axeHeadGrad.addColorStop(0, '#888'); axeHeadGrad.addColorStop(0.3, '#aaa'); axeHeadGrad.addColorStop(0.6, '#999'); axeHeadGrad.addColorStop(1, '#777');
+  ctx.fillStyle = axeHeadGrad;
+  // Main blade
+  ctx.beginPath();
+  ctx.moveTo(-18, -1);
+  ctx.lineTo(-22, -6);
+  ctx.lineTo(-24, -5);
+  ctx.lineTo(-24, -3);
+  ctx.lineTo(-20, 0);
+  ctx.closePath();
+  ctx.fill();
+  // Back blade
+  ctx.beginPath();
+  ctx.moveTo(-18, 1.5);
+  ctx.lineTo(-22, 6);
+  ctx.lineTo(-24, 5);
+  ctx.lineTo(-24, 3);
+  ctx.lineTo(-20, 1);
+  ctx.closePath();
+  ctx.fill();
+  // Axe edge highlight (sharp edge gleam)
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(-24, -5); ctx.lineTo(-24, -3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-24, 3); ctx.lineTo(-24, 5); ctx.stroke();
+  // Axe head socket
+  ctx.fillStyle = '#666'; ctx.fillRect(-20, -2, 3, 4.5);
+  // Axe metallic sheen
+  ctx.fillStyle = 'rgba(255,255,255,0.1)';
+  ctx.beginPath(); ctx.moveTo(-20, -1); ctx.lineTo(-23, -4); ctx.lineTo(-22, -4.5); ctx.lineTo(-19, -1); ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  // Head
+  // Neck
+  ctx.fillStyle = '#c8a882'; ctx.fillRect(cx - 2.5, by - 9, 5, 3.5);
+  ctx.fillStyle = 'rgba(0,0,0,0.08)'; ctx.fillRect(cx - 2, by - 7, 4, 1.5);
+
+  // Head shape (3D skin gradient)
+  const headGrad = ctx.createRadialGradient(cx - 2, by - 15, 1, cx, by - 13, 7.5);
+  headGrad.addColorStop(0, '#e8d0b0'); headGrad.addColorStop(0.6, '#d8b898'); headGrad.addColorStop(1, '#c0a080');
+  ctx.fillStyle = headGrad;
+  ctx.beginPath(); ctx.arc(cx, by - 13, 7, 0, Math.PI * 2); ctx.fill();
+  // Jaw line
+  ctx.fillStyle = 'rgba(0,0,0,0.05)';
+  ctx.beginPath(); ctx.arc(cx, by - 11, 6, 0.3, Math.PI - 0.3); ctx.fill();
+  // Ears
+  ctx.fillStyle = '#d4b494';
+  ctx.beginPath(); ctx.ellipse(cx - 6.5, by - 13, 1.5, 2.8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx + 6.5, by - 13, 1.5, 2.8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#c8a882';
+  ctx.beginPath(); ctx.ellipse(cx - 6.5, by - 13, 0.8, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx + 6.5, by - 13, 0.8, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+
+  // FULL BEARD (thick lumberjack beard)
+  const beardGrad = ctx.createRadialGradient(cx, by - 10, 1, cx, by - 9, 6);
+  beardGrad.addColorStop(0, '#5a3a1e'); beardGrad.addColorStop(0.5, '#4a2e16'); beardGrad.addColorStop(1, '#3a2210');
+  ctx.fillStyle = beardGrad;
+  // Main beard mass
+  ctx.beginPath();
+  ctx.moveTo(cx - 5, by - 12);
+  ctx.quadraticCurveTo(cx - 6, by - 9, cx - 5, by - 7);
+  ctx.quadraticCurveTo(cx - 3, by - 5, cx, by - 4.5);
+  ctx.quadraticCurveTo(cx + 3, by - 5, cx + 5, by - 7);
+  ctx.quadraticCurveTo(cx + 6, by - 9, cx + 5, by - 12);
+  ctx.closePath();
+  ctx.fill();
+  // Beard texture (hair strands)
+  ctx.strokeStyle = 'rgba(30,15,5,0.2)'; ctx.lineWidth = 0.3;
+  for (let s = 0; s < 7; s++) {
+    const sx2 = cx - 3 + s * 1;
+    ctx.beginPath(); ctx.moveTo(sx2, by - 11); ctx.lineTo(sx2 + 0.3, by - 6); ctx.stroke();
+  }
+  // Beard highlights
+  ctx.fillStyle = 'rgba(100,60,30,0.15)';
+  ctx.beginPath(); ctx.ellipse(cx - 2, by - 9, 2, 2, 0, 0, Math.PI * 2); ctx.fill();
+  // Mustache
+  ctx.fillStyle = '#4a2e16';
+  ctx.beginPath();
+  ctx.moveTo(cx - 3.5, by - 10.5);
+  ctx.quadraticCurveTo(cx, by - 9.5, cx + 3.5, by - 10.5);
+  ctx.quadraticCurveTo(cx + 4, by - 11, cx + 3.5, by - 11.5);
+  ctx.quadraticCurveTo(cx, by - 10.5, cx - 3.5, by - 11.5);
+  ctx.quadraticCurveTo(cx - 4, by - 11, cx - 3.5, by - 10.5);
+  ctx.closePath();
+  ctx.fill();
+
+  // Eyes (friendly, slightly squinting)
+  ctx.fillStyle = '#f0f0e8'; ctx.fillRect(cx - 3.5, by - 14.5, 3, 2); ctx.fillRect(cx + 0.5, by - 14.5, 3, 2);
+  // Iris (warm brown)
+  ctx.fillStyle = '#6a4a2a'; ctx.fillRect(cx - 3, by - 14, 2, 1.8); ctx.fillRect(cx + 1, by - 14, 2, 1.8);
+  // Pupil
+  ctx.fillStyle = '#111'; ctx.fillRect(cx - 2.5, by - 13.8, 1.2, 1.2); ctx.fillRect(cx + 1.5, by - 13.8, 1.2, 1.2);
+  // Eye catchlight
+  ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(cx - 2.8, by - 14, 0.5, 0.5); ctx.fillRect(cx + 1.2, by - 14, 0.5, 0.5);
+  // Upper eyelids
+  ctx.fillStyle = 'rgba(150,120,90,0.3)'; ctx.fillRect(cx - 3.5, by - 14.5, 3, 0.5); ctx.fillRect(cx + 0.5, by - 14.5, 3, 0.5);
+  // Bushy eyebrows
+  ctx.fillStyle = 'rgba(60,35,15,0.6)';
+  ctx.save(); ctx.translate(cx - 3.5, by - 15.5); ctx.rotate(0.05);
+  ctx.fillRect(0, 0, 4, 1.1); ctx.restore();
+  ctx.save(); ctx.translate(cx + 0.2, by - 15.6); ctx.rotate(-0.05);
+  ctx.fillRect(0, 0, 4, 1.1); ctx.restore();
+  // Nose
+  ctx.fillStyle = 'rgba(190,160,130,0.35)';
+  ctx.beginPath(); ctx.moveTo(cx - 0.5, by - 13); ctx.lineTo(cx + 0.5, by - 11);
+  ctx.lineTo(cx + 1.5, by - 10.5); ctx.lineTo(cx - 0.5, by - 10.5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(cx - 0.3, by - 12.5, 0.5, 1.5);
+  // Ruddy cheeks (weathered outdoorsman)
+  ctx.fillStyle = 'rgba(200,100,80,0.12)';
+  ctx.beginPath(); ctx.ellipse(cx - 4, by - 12, 2, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx + 4, by - 12, 2, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+
+  // BEANIE (knitted wool cap - dark red)
+  const beanieGrad = ctx.createLinearGradient(cx - 8, by - 22, cx + 8, by - 14);
+  beanieGrad.addColorStop(0, '#8b1a1a'); beanieGrad.addColorStop(0.4, '#7a1515'); beanieGrad.addColorStop(1, '#6e1010');
+  ctx.fillStyle = beanieGrad;
+  // Beanie dome
+  ctx.beginPath(); ctx.arc(cx, by - 17, 8.5, Math.PI, 0); ctx.fill();
+  ctx.fillRect(cx - 8.5, by - 17.5, 17, 3);
+  // Knit ribbing pattern (vertical lines)
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 0.5;
+  for (let k = 0; k < 9; k++) {
+    const kx = cx - 7 + k * 1.8;
+    ctx.beginPath(); ctx.moveTo(kx, by - 22); ctx.lineTo(kx, by - 15); ctx.stroke();
+  }
+  // Beanie fold/cuff (thicker ribbed band at bottom)
+  ctx.fillStyle = '#6e1010'; ctx.fillRect(cx - 8, by - 16, 16, 2.5);
+  // Cuff ribbing (horizontal)
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 0.4;
+  ctx.beginPath(); ctx.moveTo(cx - 7.5, by - 15); ctx.lineTo(cx + 7.5, by - 15); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx - 7.5, by - 14.5); ctx.lineTo(cx + 7.5, by - 14.5); ctx.stroke();
+  // Beanie top highlight (wool sheen)
+  ctx.fillStyle = 'rgba(255,200,200,0.08)';
+  ctx.beginPath(); ctx.arc(cx - 2, by - 20, 4, Math.PI, 0); ctx.fill();
+  // Beanie pom-pom on top
+  ctx.fillStyle = '#8b1a1a';
+  ctx.beginPath(); ctx.arc(cx, by - 23, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx.beginPath(); ctx.arc(cx - 0.5, by - 24, 1, 0, Math.PI * 2); ctx.fill();
+  // Pom-pom texture
+  ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.3;
+  for (let p = 0; p < 4; p++) {
+    ctx.beginPath(); ctx.arc(cx, by - 23, 1 + p * 0.5, p * 0.5, p * 0.5 + 1.5); ctx.stroke();
+  }
+
+  // Hair peeking out from under beanie (sides)
+  ctx.fillStyle = '#5a3a1e';
+  ctx.fillRect(cx - 7.5, by - 14.5, 2, 2); ctx.fillRect(cx + 5.5, by - 14.5, 2, 2);
+  // Sideburn detail into beard
+  ctx.fillStyle = '#4a2e16';
+  ctx.fillRect(cx - 6.5, by - 13, 1.5, 2); ctx.fillRect(cx + 5, by - 13, 1.5, 2);
+
+  // Player name floating above
+  if (playerName) {
+    ctx.font = 'bold 8px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillText(playerName, cx + 1, by - 27);
+    ctx.fillStyle = '#ffe8c0'; ctx.fillText(playerName, cx, by - 28);
+  }
+
+  // Settlement power label (total buildings)
+  const bCount = sett.buildings ? sett.buildings.length : 0;
+  drawLabel(cx, cy + 16, bCount + ' bldg', '#e6a03c');
+}
+
 function settDraw() {
   const sx = shake > 0.1 ? (Math.random() - 0.5) * shake : 0;
   const sy = shake > 0.1 ? (Math.random() - 0.5) * shake : 0;
@@ -6882,10 +7247,10 @@ function settDraw() {
           ctx.globalAlpha = 1;
         }
       }
-      // Player
+      // Player (lumberjack in settlers mode)
       if (player.x === x && player.y === y) {
         const piso = toIso(playerVisual.x, playerVisual.y);
-        drawPlayer(piso.x, piso.y);
+        settDrawPlayer(piso.x, piso.y);
       }
     }
   }
