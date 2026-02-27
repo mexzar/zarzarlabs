@@ -3347,7 +3347,7 @@ function drawPanelRow(rowY, types, startIdx) {
     // Health bar
     if (count > 0) {
       const maxHp = BATTLE_STATS[type].hp + upgrades.reinforced * 3;
-      const avgHp = hpArr.reduce((s, h) => s + h, 0) / count;
+      const avgHp = hpArr.reduce((s, h) => s + (typeof h === 'object' ? h.hp : h), 0) / count;
       const hpFrac = avgHp / maxHp;
       const barW = slotW - 20, barH = 3;
       const barX = sx + 10, barY = cy + 20;
@@ -6467,14 +6467,15 @@ function handleDeployClick(mx, my) {
     if (battle.playerUnits.some(u => getEuclidDist(u, {x:gx,y:gy}) < 0.5)) return;
 
     const stats = BATTLE_STATS[deploySelectedType];
-    const persistHp = battle.deployArmy[deploySelectedType].pop();
+    const popped = battle.deployArmy[deploySelectedType].pop();
+    const persistHp = (typeof popped === 'object' && popped !== null) ? popped.hp : popped;
     const baseMaxHp = stats.hp + upgrades.reinforced * 3;
     const unitHp = Math.min(persistHp, baseMaxHp);
     battle.playerUnits.push({
       type: deploySelectedType,
       hp: unitHp, maxHp: baseMaxHp, persistentHp: persistHp,
-      atk: stats.atk + upgrades.apRounds + engineerATKBonus,
-      range: stats.range + upgrades.longBarrels,
+      atk: stats.atk + upgrades.armorPiercing + engineerATKBonus,
+      range: stats.range + upgrades.extendedMag,
       aoe: stats.aoe + (['pikemen','crossbowmen','catapults'].includes(deploySelectedType) ? upgrades.explosiveRounds : 0),
       heavy: false,
       x: gx, y: gy, vx: gx, vy: gy,
