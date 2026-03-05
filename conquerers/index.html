@@ -139,6 +139,7 @@ canvas {
   <button onclick="showSettlementInfo()">Settlement</button>
   <button onclick="showResearchMenu()">Research</button>
   <button onclick="toggleModernMode()" id="modernModeBtn">Modern Mode: OFF</button>
+  <button onclick="showWageWarUI()" style="background:linear-gradient(180deg,#4a1a1a 0%,#2a0a0a 100%); color:#ff8a65; border:1px solid #8a3a3a;">Wage War</button>
 </div>
 
 <div id="shop">
@@ -1229,6 +1230,12 @@ function tryMove(dx, dy) {
   moveQueue.push({ x: nx, y: ny });
 
   turnCount++;
+
+  // Auto-save every 15 turns
+  if (turnCount % 15 === 0) {
+    autoSave();
+    notify('Auto-saved (turn ' + turnCount + ')', '#4caf50');
+  }
 
   // --- Ally pickup ---
   const aIdx = allies.findIndex(a => a.x === nx && a.y === ny);
@@ -2743,6 +2750,127 @@ function showSaveLoadUI() {
 // -----------------------------------------------
 //  MODERN MODE TOGGLE
 // -----------------------------------------------
+// -----------------------------------------------
+//  WAGE WAR SYSTEM
+// -----------------------------------------------
+function showWageWarUI() {
+  if (gameMode !== 'overworld' || !player) { msg('Can only wage war from the overworld!'); return; }
+  const pw = armyPower(player.army);
+  if (pw < 5) { msg('Your army is too weak to wage war!'); return; }
+
+  let html = '<div style="text-align:center;font-family:sans-serif;max-width:500px">';
+  html += '<h3 style="color:#ff8a65;margin:0 0 4px">WAGE WAR</h3>';
+  html += '<p style="font-size:10px;color:#aaa;margin:0 0 8px">Choose your enemy. A massive force will meet you on the battlefield!<br>Cost: <span style="color:#ffd54f">25 gold</span> | Your Power: <span style="color:#4fc3f7">' + pw + '</span></p>';
+
+  if (gold < 25) {
+    html += '<p style="color:#ef5350;font-size:12px">Not enough gold! (need 25g)</p>';
+    html += '<button onclick="document.getElementById(\'overlay\').classList.remove(\'show\')" style="margin-top:8px;padding:4px 16px">Close</button>';
+    html += '</div>';
+  } else {
+    const enemyTypes = Object.keys(ENEMY_TYPES);
+    for (const etype of enemyTypes) {
+      const edef = ENEMY_TYPES[etype];
+      const estats = ENEMY_BATTLE_STATS[etype];
+      const wavePower = Math.max(Math.floor(pw * 1.5), 10);
+      const numUnits = Math.max(3, Math.ceil(wavePower / estats.hp));
+      html += '<button onclick="wageWar(\'' + etype + '\');document.getElementById(\'overlay\').classList.remove(\'show\')" ';
+      html += 'style="display:block;width:90%;margin:3px auto;padding:5px 10px;font-size:11px;';
+      html += 'background:linear-gradient(180deg,' + edef.color + '33 0%,' + edef.dark + '66 100%);';
+      html += 'color:' + edef.color + ';border:1px solid ' + edef.color + '55;border-radius:4px;cursor:pointer">';
+      html += '<b>' + edef.name + '</b> — ~' + numUnits + ' units (HP:' + estats.hp + ' ATK:' + estats.atk + ')';
+      if (estats.heavy) html += ' <span style="color:#ff9800">[HEAVY]</span>';
+      html += '</button>';
+    }
+    html += '<button onclick="document.getElementById(\'overlay\').classList.remove(\'show\')" style="margin-top:8px;padding:4px 16px">Cancel</button>';
+    html += '</div>';
+  }
+
+  document.getElementById('overlayTitle').textContent = '';
+  document.getElementById('overlayMsg').innerHTML = html;
+  document.getElementById('overlayBtn').style.display = 'none';
+  document.getElementById('overlayInput').style.display = 'none';
+  document.getElementById('overlay').classList.add('show');
+  overlayCallback = () => { document.getElementById('overlayBtn').style.display = ''; document.getElementById('overlayMsg').innerHTML = ''; };
+}
+
+function wageWar(enemyType) {
+  if (gameMode !== 'overworld' || !player) return;
+  if (gold < 25) { msg('Not enough gold to wage war!'); return; }
+  gold -= 25;
+
+  const pw = armyPower(player.army);
+  const wavePower = Math.max(Math.floor(pw * 1.5), 10);
+  const estats = ENEMY_BATTLE_STATS[enemyType];
+  const numEnemies = Math.max(3, Math.ceil(wavePower / estats.hp));
+
+  gameMode = 'deploy';
+  deploySelectedType = null;
+  battleParticles = [];
+  battleFloatingTexts = [];
+
+  // Generate battle grid
+  const grid = [];
+  for (let y = 0; y < BROWS; y++) {
+    grid[y] = [];
+    for (let x = 0; x < BCOLS; x++) {
+      if (x >= 3 && x < BCOLS - 3 && Math.random() < 0.08) grid[y][x] = 'wall';
+      else grid[y][x] = 'grass';
+    }
+  }
+
+  // Generate large enemy wave - mix in some variety
+  const edef = ENEMY_TYPES[enemyType];
+  const enemyUnits = [];
+  for (let i = 0; i < numEnemies; i++) {
+    // Mix unit types for more interesting battles
+    let unitType = enemyType;
+    if (i > 2 && Math.random() < 0.25) {
+      const pool = Object.keys(ENEMY_BATTLE_STATS);
+      unitType = pool[Math.floor(Math.random() * pool.length)];
+    }
+    const stats = ENEMY_BATTLE_STATS[unitType];
+    const ex = BCOLS - 1 - (i % 3);
+    const ey = Math.floor(i / 3) % BROWS;
+    enemyUnits.push({
+      type: unitType, hp: stats.hp, maxHp: stats.hp,
+      atk: stats.atk, range: stats.range,
+      aoe: stats.aoe, heavy: stats.heavy || false,
+      x: ex, y: ey, vx: ex, vy: ey,
+      moveSpeed: stats.moveSpeed, attackRate: stats.attackRate, attackCD: 0,
+    });
+  }
+  // Fix overlapping positions
+  for (let i = 1; i < enemyUnits.length; i++) {
+    while (enemyUnits.some((u, j) => j < i && u.x === enemyUnits[i].x && u.y === enemyUnits[i].y)) {
+      enemyUnits[i].y = (enemyUnits[i].y + 1) % BROWS;
+    }
+    enemyUnits[i].vx = enemyUnits[i].x;
+    enemyUnits[i].vy = enemyUnits[i].y;
+  }
+
+  // Wage War gives extra gold reward on victory — store as bonus
+  const goldBonus = Math.ceil(wavePower * 0.4);
+
+  battle = {
+    grid,
+    playerUnits: [],
+    enemyUnits,
+    enemyContext: { type: enemyType, str: wavePower, index: -1, isFort: false, arr: [], isWageWar: true, goldBonus },
+    simSpeed: 1,
+    simPaused: false,
+    frameCount: 0,
+    resultMsg: '',
+    deployArmy: {},
+  };
+  for (const t of TROOP_ORDER) battle.deployArmy[t] = Array.isArray(player.army[t]) ? player.army[t].slice() : [];
+
+  spawnParticles(player.x, player.y, '#ff5252', 15, 4);
+  msg('Wage War! A massive ' + edef.name + ' force awaits!');
+  notify('WAR DECLARED!', '#ff5252');
+  updateHUD();
+  draw();
+}
+
 // Store original medieval names for restoration
 const ORIG_TROOP_NAMES = {}; for (const k in TROOP_TYPES) ORIG_TROOP_NAMES[k] = TROOP_TYPES[k].name;
 const ORIG_ENEMY_NAMES = {}; for (const k in ENEMY_TYPES) ORIG_ENEMY_NAMES[k] = ENEMY_TYPES[k].name;
@@ -6493,7 +6621,7 @@ function getProjectileType(unitType) {
   if (unitType === 'dark_mage') return 'magic_bolt';
   if (unitType === 'longbowmen' || unitType === 'enemy_archer') return 'arrow';
   if (unitType === 'assassins') return 'thrown_dagger';
-  if (unitType === 'cannons' || unitType === 'dragon_rider') return 'cannonball';
+  if (unitType === 'cannons' || unitType === 'dragon_rider' || unitType === 'dragonriders') return 'cannonball';
   return 'arrow';
 }
 
@@ -6802,7 +6930,16 @@ function battleVictory() {
   kills++;
 
   let capturedText = '';
-  if (!ctx2.isFort) {
+  if (ctx2.isWageWar) {
+    // Wage War victory — extra gold bonus, captured troops
+    const bonus = ctx2.goldBonus || 0;
+    gold += bonus;
+    const yieldType = def.yields || 'militia';
+    const yieldDef = TROOP_TYPES[yieldType];
+    const capturedCount = Math.max(2, Math.ceil(ctx2.str * 0.3 / yieldDef.str));
+    addTroops(player.army, yieldType, capturedCount);
+    capturedText = '+' + bonus + ' war bonus gold\n+' + capturedCount + ' ' + yieldDef.name;
+  } else if (!ctx2.isFort) {
     const yieldType = def.yields || 'militia';
     const yieldDef = TROOP_TYPES[yieldType];
     const captureRate = Math.max(0.2, 0.4 - getDifficulty() * 0.02);
@@ -6870,7 +7007,7 @@ function battleDefeat() {
   const totalEnemyHp = battle.enemyUnits.reduce((s, u) => s + u.maxHp, 0);
   const remainingHp = battle.enemyUnits.reduce((s, u) => s + u.hp, 0);
   const dmgFraction = 1 - (remainingHp / totalEnemyHp);
-  if (!ctx2.isFort) {
+  if (!ctx2.isFort && !ctx2.isWageWar) {
     const e = ctx2.arr[ctx2.index];
     if (e) e.str = Math.max(1, Math.ceil(e.str * (1 - dmgFraction)));
   }
