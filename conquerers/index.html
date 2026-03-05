@@ -138,6 +138,7 @@ canvas {
   <button onclick="harvest()">Harvest (H)</button>
   <button onclick="showSettlementInfo()">Settlement</button>
   <button onclick="showResearchMenu()">Research</button>
+  <button onclick="toggleModernMode()" id="modernModeBtn">Modern Mode: OFF</button>
 </div>
 
 <div id="shop">
@@ -152,6 +153,7 @@ canvas {
   <button onclick="shopBuy('firelancers')">Fire Lancers x1 (50g)</button>
   <button onclick="shopBuy('assassins')">Assassins x1 (55g)</button>
   <button onclick="shopBuy('cannons')">Cannons x1 (55g)</button>
+  <button onclick="shopBuy('dragonriders')">Dragon Riders x1 (50g)</button>
   <button onclick="shopHealAll()">Heal All (20g)</button>
   <button onclick="shopScout()">Scout Map (15g)</button>
 </div>
@@ -175,7 +177,8 @@ canvas {
   <span style="color:#66bb6a">Healers</span> -
   <span style="color:#ff7043">Fire Lancers</span> -
   <span style="color:#ab47bc">Assassins</span> -
-  <span style="color:#42a5f5">Cannons</span>
+  <span style="color:#42a5f5">Cannons</span> -
+  <span style="color:#e040fb">Dragon Riders</span>
 </div>
 
 <div id="overlay">
@@ -272,8 +275,9 @@ const TROOP_TYPES = {
   firelancers: { name:'Fire Lancers',  str:6,   color:'#ff7043', dark:'#d84315', cost:50, qty:1, desc:'Short range massive AOE (Greek fire)' },
   assassins:   { name:'Assassins',     str:5,   color:'#ab47bc', dark:'#6a1b9a', cost:55, qty:1, desc:'Fast stealth attacker' },
   cannons:     { name:'Cannons',       str:9,   color:'#42a5f5', dark:'#1565c0', cost:55, qty:1, desc:'STRONGEST ranged siege weapon' },
+  dragonriders:{ name:'Dragon Riders', str:14,  color:'#e040fb', dark:'#7b1fa2', cost:50, qty:1, desc:'Mounted dragon, flying AOE fire' },
 };
-const TROOP_ORDER = ['militia','longbowmen','crossbowmen','menatarms','pikemen','knights','catapults','healers','firelancers','assassins','cannons'];
+const TROOP_ORDER = ['militia','longbowmen','crossbowmen','menatarms','pikemen','knights','catapults','healers','firelancers','assassins','cannons','dragonriders'];
 
 // ===============================================
 //  ENEMY TYPE DEFINITIONS
@@ -303,6 +307,7 @@ const BATTLE_STATS = {
   firelancers: { hp:7,  atk:7,  range:2, moveRange:2, aoe:2, name:'Fire Lancer',  moveSpeed:0.02, attackRate:30 },
   assassins:   { hp:6,  atk:8,  range:3, moveRange:4, aoe:0, name:'Assassin',     moveSpeed:0.04, attackRate:40 },
   cannons:     { hp:18, atk:7,  range:4, moveRange:4, aoe:0, name:'Cannon',       moveSpeed:0.04, attackRate:50 },
+  dragonriders:{ hp:22, atk:10, range:4, moveRange:4, aoe:1, name:'Dragon Rider', moveSpeed:0.04, attackRate:55 },
 };
 
 // ===============================================
@@ -522,6 +527,32 @@ let playerVisual = { x: 1, y: 1 };
 //  GAME MODE & TACTICAL BATTLE STATE
 // ===============================================
 let gameMode = 'overworld'; // 'overworld' | 'deploy' | 'battle' | 'battle_result'
+let modernMode = false;
+
+// Modern mode name mappings
+const MODERN_TROOP_NAMES = {
+  militia: 'Infantry', longbowmen: 'Snipers', crossbowmen: 'Machine Gunners',
+  menatarms: 'Marines', pikemen: 'Anti-Tank', knights: 'Tanks',
+  catapults: 'Artillery', healers: 'Medics', firelancers: 'Flamethrowers',
+  assassins: 'Special Ops', cannons: 'Howitzers', dragonriders: 'Attack Helicopters'
+};
+const MODERN_ENEMY_NAMES = {
+  bandit: 'Insurgent', raider: 'Guerrilla', enemy_archer: 'Enemy Sniper',
+  war_elephant: 'APC', dragon_rider: 'Attack Chopper', dark_mage: 'EW Specialist', troll: 'Heavy Tank'
+};
+const MODERN_BUILDING_NAMES = {
+  house: 'Barracks', farm: 'Supply Depot', lumbermill: 'Lumber Yard', quarry: 'Concrete Plant',
+  mine: 'Refinery', huntingLodge: 'Recon Post', market: 'Trade Center', watchtower: 'Radar Tower',
+  warehouse: 'Storage Facility', hospital: 'Field Hospital', temple: 'Command Center',
+  academy: 'War College', blacksmith: 'Weapons Factory', port: 'Airfield'
+};
+function displayName(type, category) {
+  if (!modernMode) return null;
+  if (category === 'troop') return MODERN_TROOP_NAMES[type] || null;
+  if (category === 'enemy') return MODERN_ENEMY_NAMES[type] || null;
+  if (category === 'building') return MODERN_BUILDING_NAMES[type] || null;
+  return null;
+}
 
 const BCOLS = 12, BROWS = 8;
 let battle = null;
@@ -2535,6 +2566,7 @@ function saveGame(slot) {
       }
       return out;
     })(),
+    modernMode,
     timestamp: Date.now(),
   };
   // Save player army as arrays of unit objects
@@ -2628,6 +2660,10 @@ function loadGame(slot) {
   researched = data.researched || {};
   currentResearch = data.currentResearch ? { ...data.currentResearch } : null;
 
+  // Restore modern mode
+  if (data.modernMode && !modernMode) toggleModernMode();
+  else if (!data.modernMode && modernMode) toggleModernMode();
+
   // Restore player army
   const army = newArmy();
   if (data.army) {
@@ -2703,6 +2739,57 @@ function showSaveLoadUI() {
   document.getElementById('overlay').classList.add('show');
   overlayCallback = () => { document.getElementById('overlayBtn').style.display = ''; document.getElementById('overlayMsg').innerHTML = ''; };
 }
+
+// -----------------------------------------------
+//  MODERN MODE TOGGLE
+// -----------------------------------------------
+// Store original medieval names for restoration
+const ORIG_TROOP_NAMES = {}; for (const k in TROOP_TYPES) ORIG_TROOP_NAMES[k] = TROOP_TYPES[k].name;
+const ORIG_ENEMY_NAMES = {}; for (const k in ENEMY_TYPES) ORIG_ENEMY_NAMES[k] = ENEMY_TYPES[k].name;
+const ORIG_BATTLE_NAMES = {}; for (const k in BATTLE_STATS) ORIG_BATTLE_NAMES[k] = BATTLE_STATS[k].name;
+const ORIG_UPGRADE_NAMES = {}; for (const k in UPGRADE_DEFS) ORIG_UPGRADE_NAMES[k] = UPGRADE_DEFS[k].name;
+const MODERN_UPGRADE_NAMES = { armorPiercing: 'AP Rounds', extendedMag: 'Extended Range', reinforced: 'Body Armor', explosiveRounds: 'HE Shells' };
+
+function toggleModernMode() {
+  modernMode = !modernMode;
+  document.getElementById('modernModeBtn').textContent = 'Modern Mode: ' + (modernMode ? 'ON' : 'OFF');
+  // Swap names on type objects so all code auto-updates
+  for (const k in TROOP_TYPES) TROOP_TYPES[k].name = modernMode ? (MODERN_TROOP_NAMES[k] || ORIG_TROOP_NAMES[k]) : ORIG_TROOP_NAMES[k];
+  for (const k in ENEMY_TYPES) ENEMY_TYPES[k].name = modernMode ? (MODERN_ENEMY_NAMES[k] || ORIG_ENEMY_NAMES[k]) : ORIG_ENEMY_NAMES[k];
+  for (const k in BATTLE_STATS) BATTLE_STATS[k].name = modernMode ? (MODERN_TROOP_NAMES[k] || ORIG_BATTLE_NAMES[k]) : ORIG_BATTLE_NAMES[k];
+  for (const k in UPGRADE_DEFS) UPGRADE_DEFS[k].name = modernMode ? (MODERN_UPGRADE_NAMES[k] || ORIG_UPGRADE_NAMES[k]) : ORIG_UPGRADE_NAMES[k];
+  // Update title
+  document.querySelector('h1').textContent = modernMode ? 'COMMANDERS' : 'CONQUERERS';
+  document.getElementById('subtitle').textContent = modernMode
+    ? 'BUILD YOUR BASE & DOMINATE THE BATTLEFIELD'
+    : 'BUILD YOUR KINGDOM & CONQUER THE REALM';
+  // Update shop buttons
+  const shopBtns = document.querySelectorAll('#shop button');
+  shopBtns.forEach(btn => {
+    const m = btn.getAttribute('onclick');
+    if (!m) return;
+    const match = m.match(/shopBuy\('(\w+)'\)/);
+    if (match) {
+      const type = match[1];
+      const def = TROOP_TYPES[type];
+      if (def) btn.textContent = def.name + ' x' + def.qty + ' (' + def.cost + 'g)';
+    }
+  });
+  // Update legend
+  const legend = document.getElementById('legend');
+  let legendHTML = '<b>Arrow keys / WASD / Click</b> to move | <b>Units:</b> ';
+  legendHTML += TROOP_ORDER.map(t => '<span style="color:' + TROOP_TYPES[t].color + '">' + TROOP_TYPES[t].name + '</span>').join(' - ');
+  legend.innerHTML = legendHTML;
+  // Update blacksmith labels
+  updateBlacksmithButtons();
+  // Update HUD labels
+  const engLabel = document.querySelector('#eng-num .label');
+  if (engLabel) engLabel.textContent = modernMode ? 'Engineers ' : 'Smiths ';
+  const castleLabel = document.querySelector('#forts-left .label');
+  if (castleLabel) castleLabel.textContent = modernMode ? 'Bases Left ' : 'Castles Left ';
+  if (gameMode === 'overworld' && player) draw();
+}
+
 // ===============================================
 //  PART 4: ALL DRAWING FUNCTIONS (Medieval Theme)
 // ===============================================
@@ -3672,6 +3759,25 @@ function drawMiniTroop(x, y, type, def) {
       ctx.beginPath(); ctx.arc(x + 14, y + 2.5, 2, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#333';
       ctx.beginPath(); ctx.arc(x + 14, y + 2.5, 1, 0, Math.PI * 2); ctx.fill();
+      break;
+    case 'dragonriders':
+      // Dragon body
+      ctx.fillStyle = def.dark;
+      ctx.beginPath(); ctx.moveTo(x, y + 4); ctx.lineTo(x + 4, y); ctx.lineTo(x + 12, y);
+      ctx.lineTo(x + 14, y + 4); ctx.lineTo(x + 12, y + 7); ctx.lineTo(x + 2, y + 7); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = def.color;
+      ctx.beginPath(); ctx.moveTo(x + 2, y + 5); ctx.lineTo(x + 5, y + 1); ctx.lineTo(x + 11, y + 1);
+      ctx.lineTo(x + 12, y + 5); ctx.lineTo(x + 11, y + 6); ctx.lineTo(x + 3, y + 6); ctx.closePath(); ctx.fill();
+      // Wings
+      ctx.fillStyle = 'rgba(180,80,255,0.5)';
+      ctx.beginPath(); ctx.moveTo(x + 5, y + 1); ctx.lineTo(x - 2, y - 5); ctx.lineTo(x + 3, y + 3); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 11, y + 1); ctx.lineTo(x + 18, y - 5); ctx.lineTo(x + 13, y + 3); ctx.closePath(); ctx.fill();
+      // Dragon head
+      ctx.fillStyle = def.color; ctx.beginPath(); ctx.arc(x + 14, y + 1, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(x + 15, y, 0.7, 0, Math.PI * 2); ctx.fill();
+      // Rider
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(x + 8, y - 3, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#444'; ctx.fillRect(x + 7, y - 2, 3, 3);
       break;
   }
 }
@@ -6979,6 +7085,49 @@ function drawBattleUnit(unit, sx, sy, isPlayer, selected) {
     ctx.fillStyle = '#333'; ctx.fillRect(sx - 2, cy - 8, 4, 4);
     // Tail
     ctx.strokeStyle = dark; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(sx - 8, cy + 2); ctx.quadraticCurveTo(sx - 14, cy + 6, sx - 16, cy + 2); ctx.stroke();
+  } else if (unit.type === 'dragonriders') {
+    // Player dragon rider - mounted on purple dragon
+    // Dragon body
+    ctx.fillStyle = '#7b1fa2';
+    ctx.beginPath(); ctx.moveTo(sx - 10, cy); ctx.lineTo(sx - 5, cy - 6);
+    ctx.lineTo(sx + 6, cy - 6); ctx.lineTo(sx + 8, cy);
+    ctx.lineTo(sx + 6, cy + 4); ctx.lineTo(sx - 8, cy + 4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#e040fb';
+    ctx.beginPath(); ctx.moveTo(sx - 8, cy + 1); ctx.lineTo(sx - 3, cy - 4);
+    ctx.lineTo(sx + 4, cy - 4); ctx.lineTo(sx + 6, cy + 1);
+    ctx.lineTo(sx + 4, cy + 3); ctx.lineTo(sx - 6, cy + 3); ctx.closePath(); ctx.fill();
+    // Wings (flapping)
+    const drWingAngle = Math.sin(animFrame * 0.15) * 0.3;
+    ctx.fillStyle = 'rgba(180,80,255,0.6)';
+    ctx.beginPath();
+    ctx.moveTo(sx - 2, cy - 4);
+    ctx.lineTo(sx - 14, cy - 12 + drWingAngle * 10);
+    ctx.lineTo(sx - 8, cy - 2);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(sx + 2, cy - 4);
+    ctx.lineTo(sx + 14, cy - 12 + drWingAngle * 10);
+    ctx.lineTo(sx + 8, cy - 2);
+    ctx.closePath(); ctx.fill();
+    // Dragon head
+    ctx.fillStyle = '#e040fb';
+    ctx.beginPath(); ctx.arc(sx + 8, cy - 4, 3, 0, Math.PI * 2); ctx.fill();
+    // Dragon eye
+    ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(sx + 9, cy - 5, 1, 0, Math.PI * 2); ctx.fill();
+    // Fire breath
+    const firePulse = 0.5 + Math.sin(animFrame * 0.2) * 0.3;
+    ctx.fillStyle = 'rgba(255,140,0,' + firePulse + ')';
+    ctx.beginPath(); ctx.moveTo(sx + 11, cy - 4); ctx.lineTo(sx + 18, cy - 6); ctx.lineTo(sx + 18, cy - 2); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,235,59,' + firePulse + ')';
+    ctx.beginPath(); ctx.arc(sx + 16, cy - 4, 1.5, 0, Math.PI * 2); ctx.fill();
+    // Rider on top
+    ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(sx, cy - 10, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#4a148c'; ctx.fillRect(sx - 2, cy - 8, 4, 4);
+    // Rider helmet
+    ctx.fillStyle = '#9e9e9e'; ctx.beginPath(); ctx.arc(sx, cy - 12, 2, Math.PI, 0); ctx.fill();
+    // Tail
+    ctx.strokeStyle = '#7b1fa2'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(sx - 8, cy + 2); ctx.quadraticCurveTo(sx - 14, cy + 6, sx - 16, cy + 2); ctx.stroke();
   } else if (unit.type === 'knights') {
     // Mounted knight on horse with lance
