@@ -3596,7 +3596,123 @@ function drawMinimap() {
 // -----------------------------------------------
 //  SECTION 7: MINI TROOP SPRITES (Medieval)
 // -----------------------------------------------
+function drawModernMiniTroop(x, y, type, def) {
+  ctx.fillStyle = def.color;
+  switch (type) {
+    case 'militia': // Infantry - soldier with rifle
+      ctx.fillStyle = '#556b2f'; ctx.fillRect(x + 3, y + 2, 6, 8);
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(x + 6, y, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#4a5a2a'; ctx.fillRect(x + 3, y - 3, 6, 2); // helmet
+      ctx.fillStyle = '#333'; ctx.fillRect(x + 9, y + 1, 6, 1); // rifle
+      ctx.fillStyle = '#555'; ctx.fillRect(x + 8, y + 2, 2, 3); // grip
+      break;
+    case 'longbowmen': // Snipers - ghillie, long rifle
+      ctx.fillStyle = '#4a5a3a'; ctx.fillRect(x + 3, y + 2, 6, 8);
+      ctx.fillStyle = '#5a6a4a'; ctx.fillRect(x + 2, y + 1, 8, 3); // ghillie poncho
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(x + 6, y, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#3a4a2a'; ctx.fillRect(x + 3, y - 3, 6, 2); // boonie hat
+      ctx.fillStyle = '#333'; ctx.fillRect(x + 9, y, 8, 1); // long rifle
+      ctx.fillStyle = '#4fc3f7'; ctx.beginPath(); ctx.arc(x + 13, y - 1, 1, 0, Math.PI * 2); ctx.fill(); // scope
+      break;
+    case 'crossbowmen': // Machine Gunners
+      ctx.fillStyle = '#556b2f'; ctx.fillRect(x + 2, y + 2, 8, 8);
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(x + 6, y, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#4a5a2a'; ctx.fillRect(x + 2, y - 3, 8, 2);
+      ctx.fillStyle = '#333'; ctx.fillRect(x + 9, y, 6, 1.5); // MG body
+      ctx.fillStyle = '#555'; ctx.fillRect(x + 14, y + 1, 1, 3); // bipod leg
+      ctx.fillStyle = '#555'; ctx.fillRect(x + 13, y + 1, 1, 3);
+      break;
+    case 'menatarms': // Marines - body armor, rifle
+      ctx.fillStyle = '#556b2f'; ctx.fillRect(x + 2, y + 1, 8, 9);
+      ctx.fillStyle = '#6b7b4f'; ctx.fillRect(x + 3, y + 2, 6, 4); // vest
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(x + 6, y - 1, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#4a5a2a'; ctx.fillRect(x + 2, y - 5, 8, 3); // tactical helmet
+      ctx.fillStyle = '#333'; ctx.fillRect(x + 10, y - 1, 5, 1); // rifle
+      ctx.fillStyle = '#444'; ctx.fillRect(x - 1, y, 3, 5); // plate carrier side
+      break;
+    case 'pikemen': // Anti-Tank - RPG tube
+      ctx.fillStyle = '#556b2f'; ctx.fillRect(x + 3, y + 2, 6, 8);
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(x + 6, y, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#4a5a2a'; ctx.fillRect(x + 3, y - 4, 6, 3);
+      ctx.fillStyle = '#555'; ctx.fillRect(x + 7, y - 10, 2, 12); // RPG tube
+      ctx.fillStyle = '#4a5a2a'; ctx.beginPath(); ctx.moveTo(x + 6.5, y - 10); ctx.lineTo(x + 9.5, y - 10); ctx.lineTo(x + 8, y - 13); ctx.closePath(); ctx.fill(); // warhead
+      break;
+    case 'knights': // Tanks - armored vehicle
+      ctx.fillStyle = '#556b2f'; ctx.fillRect(x, y + 3, 16, 6); // hull
+      ctx.fillStyle = '#4a5a2a'; ctx.fillRect(x + 1, y + 4, 14, 4); // upper hull
+      ctx.fillStyle = '#3a4a1a'; ctx.fillRect(x + 5, y - 1, 6, 4); // turret
+      ctx.fillStyle = '#333'; ctx.fillRect(x + 11, y, 6, 1.5); // barrel
+      ctx.fillStyle = '#2a3a0a';
+      ctx.beginPath(); ctx.arc(x + 3, y + 9, 2, 0, Math.PI * 2); ctx.fill(); // wheels
+      ctx.beginPath(); ctx.arc(x + 8, y + 9, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 13, y + 9, 2, 0, Math.PI * 2); ctx.fill();
+      break;
+    case 'catapults': // Artillery - mobile gun
+      ctx.fillStyle = '#556b2f'; ctx.fillRect(x, y + 4, 14, 4); // chassis
+      ctx.fillStyle = '#3a4a1a';
+      ctx.beginPath(); ctx.arc(x + 3, y + 9, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 11, y + 9, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#444'; ctx.fillRect(x + 3, y, 9, 2.5); // barrel
+      ctx.fillStyle = '#555'; ctx.fillRect(x + 12, y + 0.5, 2, 1.5); // muzzle brake
+      ctx.fillStyle = '#4a5a2a'; ctx.fillRect(x + 4, y + 2, 6, 2); // gun shield
+      break;
+    case 'healers': // Medics - white with red cross
+      ctx.fillStyle = '#e8e8e8'; ctx.fillRect(x + 3, y + 2, 6, 8);
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(x + 6, y, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#4a5a2a'; ctx.fillRect(x + 3, y - 3, 6, 2); // helmet
+      ctx.fillStyle = '#f44336'; ctx.fillRect(x + 5, y + 3, 2, 4); // red cross vert
+      ctx.fillStyle = '#f44336'; ctx.fillRect(x + 4, y + 4, 4, 2); // red cross horiz
+      ctx.fillStyle = '#556b2f'; ctx.fillRect(x + 10, y + 2, 3, 4); // medkit
+      break;
+    case 'firelancers': // Flamethrowers
+      ctx.fillStyle = '#556b2f'; ctx.fillRect(x + 3, y + 2, 6, 8);
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(x + 6, y, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#4a5a2a'; ctx.fillRect(x + 3, y - 4, 6, 3);
+      ctx.fillStyle = '#555'; ctx.fillRect(x + 9, y - 1, 5, 1.5); // nozzle
+      ctx.fillStyle = '#ff6600'; ctx.beginPath(); ctx.moveTo(x + 13, y - 2); ctx.lineTo(x + 17, y); ctx.lineTo(x + 13, y + 2); ctx.fill(); // flame
+      ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(x + 15, y, 1.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#4a5a2a'; ctx.fillRect(x, y + 1, 3, 5); // fuel tanks
+      break;
+    case 'assassins': // Special Ops - dark tactical
+      ctx.fillStyle = '#1a1a2e'; ctx.fillRect(x + 3, y + 2, 6, 8);
+      ctx.fillStyle = '#2a2a3e'; ctx.fillRect(x + 3, y + 1, 6, 3);
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(x + 6, y, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.fillRect(x + 2, y - 4, 8, 3); // NVG headset
+      ctx.fillStyle = '#4caf50'; ctx.fillRect(x + 4, y - 3, 2, 1); ctx.fillRect(x + 7, y - 3, 2, 1); // NVG tubes
+      ctx.fillStyle = '#333'; ctx.fillRect(x + 9, y + 1, 5, 1); // suppressed weapon
+      ctx.fillStyle = '#444'; ctx.fillRect(x + 13, y, 2, 1); // suppressor
+      break;
+    case 'cannons': // Howitzers - large gun
+      ctx.fillStyle = '#556b2f'; ctx.fillRect(x, y + 4, 14, 4); // platform
+      ctx.fillStyle = '#3a4a1a';
+      ctx.beginPath(); ctx.arc(x + 2, y + 9, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 12, y + 9, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#444'; ctx.fillRect(x + 2, y, 10, 3); // barrel
+      ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(x + 12, y + 1.5, 2, 0, Math.PI * 2); ctx.fill(); // muzzle
+      ctx.fillStyle = '#4a5a2a'; ctx.fillRect(x + 3, y + 2, 4, 2); // breech
+      break;
+    case 'dragonriders': // Attack Helicopter
+      ctx.fillStyle = '#556b2f'; // fuselage
+      ctx.beginPath(); ctx.moveTo(x + 2, y + 3); ctx.lineTo(x + 5, y); ctx.lineTo(x + 13, y);
+      ctx.lineTo(x + 16, y + 3); ctx.lineTo(x + 13, y + 5); ctx.lineTo(x + 3, y + 5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#4a5a2a'; ctx.fillRect(x + 5, y + 1, 7, 3); // cockpit
+      ctx.fillStyle = 'rgba(150,200,255,0.4)'; ctx.fillRect(x + 11, y + 1, 3, 2); // windshield
+      // Main rotor
+      ctx.strokeStyle = '#666'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x - 1, y - 2); ctx.lineTo(x + 17, y - 2); ctx.stroke();
+      ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(x + 8, y - 2, 1.5, 0, Math.PI * 2); ctx.fill(); // hub
+      // Tail boom
+      ctx.fillStyle = '#4a5a2a'; ctx.fillRect(x, y + 2, 3, 1.5);
+      // Stub wings
+      ctx.fillStyle = '#556b2f'; ctx.fillRect(x + 6, y + 5, 5, 1);
+      // Rockets on stub wings
+      ctx.fillStyle = '#666'; ctx.fillRect(x + 6, y + 5.5, 1.5, 0.5); ctx.fillRect(x + 10, y + 5.5, 1.5, 0.5);
+      break;
+  }
+}
+
 function drawMiniTroop(x, y, type, def) {
+  if (modernMode) { drawModernMiniTroop(x, y, type, def); return; }
   ctx.fillStyle = def.color;
   switch (type) {
     case 'militia':
@@ -3842,6 +3958,85 @@ function drawPlayer(sx, sy) {
   ctx.beginPath(); ctx.ellipse(cx + 3, cy + 6, 12, 4.5, 0.2, 0, Math.PI * 2); ctx.fill();
 
   const by = cy - 10 + bob;
+
+  if (modernMode) {
+    // === MODERN COMMANDER ===
+    // Combat boots
+    ctx.fillStyle = '#1a1a0a'; ctx.fillRect(cx - 6, by + 11, 5, 4); ctx.fillRect(cx + 1, by + 11, 5, 4);
+    ctx.fillStyle = '#111'; ctx.fillRect(cx - 7, by + 14, 6, 1.5); ctx.fillRect(cx, by + 14, 6, 1.5);
+    // Cargo pants (OD green)
+    ctx.fillStyle = '#3a4a2a'; ctx.fillRect(cx - 6, by + 3, 5, 9); ctx.fillRect(cx + 1, by + 3, 5, 9);
+    ctx.fillStyle = '#4a5a3a'; ctx.fillRect(cx - 5, by + 6, 3, 3); ctx.fillRect(cx + 2, by + 7, 3, 3); // cargo pockets
+    // Belt with holster
+    ctx.fillStyle = '#2a2a1a'; ctx.fillRect(cx - 6, by + 3, 12, 1.5);
+    ctx.fillStyle = '#333'; ctx.fillRect(cx + 4, by + 2, 2, 4); // holster
+    ctx.fillStyle = '#222'; ctx.fillRect(cx + 4.5, by + 1, 1.5, 2); // pistol grip
+    // Body - tactical uniform
+    const bodyGrad = ctx.createLinearGradient(cx - 9, by - 7, cx + 9, by + 5);
+    bodyGrad.addColorStop(0, '#4a5a3a'); bodyGrad.addColorStop(0.5, '#3a4a2a'); bodyGrad.addColorStop(1, '#2a3a1a');
+    ctx.fillStyle = bodyGrad;
+    ctx.fillRect(cx - 9, by - 7, 18, 13);
+    // Plate carrier / vest
+    ctx.fillStyle = '#556b2f'; ctx.fillRect(cx - 7, by - 5, 14, 8);
+    ctx.fillStyle = '#4a5a2a'; ctx.fillRect(cx - 6, by - 4, 4, 3); ctx.fillRect(cx + 2, by - 4, 4, 3); // MOLLE pouches
+    ctx.fillStyle = '#5a6a3a'; ctx.fillRect(cx - 6, by, 4, 2); ctx.fillRect(cx + 2, by, 4, 2); // lower pouches
+    // Officer insignia
+    ctx.fillStyle = '#c0c0c0';
+    ctx.beginPath(); ctx.moveTo(cx, by - 3); ctx.lineTo(cx + 1.5, by - 1.5); ctx.lineTo(cx, by); ctx.lineTo(cx - 1.5, by - 1.5); ctx.closePath(); ctx.fill();
+    // Collar
+    ctx.fillStyle = '#3a4a2a'; ctx.fillRect(cx - 4, by - 8, 8, 2);
+    // Arms
+    ctx.fillStyle = '#3a4a2a'; ctx.fillRect(cx - 13, by - 4, 5, 10); ctx.fillRect(cx + 8, by - 4, 5, 10);
+    // Shoulder patches
+    ctx.fillStyle = '#556b2f';
+    ctx.beginPath(); ctx.ellipse(cx - 10, by - 5, 3.5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 10, by - 5, 3.5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    // Rank patch
+    ctx.fillStyle = '#c0c0c0'; ctx.fillRect(cx - 11, by - 5.5, 2, 0.5); ctx.fillRect(cx - 11, by - 4.5, 2, 0.5);
+    // Gloves
+    ctx.fillStyle = '#2a2a1a'; ctx.fillRect(cx - 13, by + 5, 4, 3); ctx.fillRect(cx + 9, by + 5, 4, 3);
+    // Head
+    ctx.fillStyle = '#c8a882'; ctx.fillRect(cx - 2.5, by - 9, 5, 2);
+    const headGrad2 = ctx.createRadialGradient(cx - 2, by - 15, 1, cx, by - 13, 7);
+    headGrad2.addColorStop(0, '#e8d0b0'); headGrad2.addColorStop(0.6, '#d8b898'); headGrad2.addColorStop(1, '#c0a080');
+    ctx.fillStyle = headGrad2;
+    ctx.beginPath(); ctx.arc(cx, by - 13, 6.5, 0, Math.PI * 2); ctx.fill();
+    // Short military haircut
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath(); ctx.arc(cx, by - 16, 5, Math.PI, 0); ctx.fill();
+    ctx.fillRect(cx - 5, by - 17, 10, 2);
+    // Eyes
+    ctx.fillStyle = '#f0f0e8'; ctx.fillRect(cx - 3, by - 14.5, 2.5, 2); ctx.fillRect(cx + 0.5, by - 14.5, 2.5, 2);
+    ctx.fillStyle = '#4a6a7a'; ctx.fillRect(cx - 2.5, by - 14, 1.8, 1.6); ctx.fillRect(cx + 1, by - 14, 1.8, 1.6);
+    ctx.fillStyle = '#111'; ctx.fillRect(cx - 2, by - 13.8, 1.2, 1.2); ctx.fillRect(cx + 1.5, by - 13.8, 1.2, 1.2);
+    // Beret (dark green/maroon)
+    ctx.fillStyle = '#4a1a2a';
+    ctx.beginPath(); ctx.arc(cx, by - 18, 7.5, Math.PI, 0); ctx.fill();
+    ctx.fillRect(cx - 7.5, by - 18.5, 15, 3);
+    // Beret top (tilted)
+    ctx.fillStyle = '#5a2a3a';
+    ctx.beginPath(); ctx.arc(cx + 3, by - 20, 4, 0, Math.PI * 2); ctx.fill();
+    // Beret badge
+    ctx.fillStyle = '#ffd54f'; ctx.beginPath(); ctx.arc(cx - 2, by - 17, 1.5, 0, Math.PI * 2); ctx.fill();
+    // Sunglasses
+    ctx.fillStyle = '#111'; ctx.fillRect(cx - 4, by - 14.5, 3, 2); ctx.fillRect(cx + 1, by - 14.5, 3, 2);
+    ctx.fillStyle = '#222'; ctx.fillRect(cx - 1, by - 14, 2, 0.5); // bridge
+    // Chin
+    ctx.fillStyle = 'rgba(190,160,130,0.35)';
+    ctx.beginPath(); ctx.moveTo(cx - 0.5, by - 13); ctx.lineTo(cx + 0.5, by - 11); ctx.lineTo(cx + 1.5, by - 10.5); ctx.lineTo(cx - 0.5, by - 10.5); ctx.closePath(); ctx.fill();
+    // Radio on shoulder
+    ctx.fillStyle = '#333'; ctx.fillRect(cx - 12, by - 7, 2, 3);
+    ctx.fillStyle = '#444'; ctx.fillRect(cx - 11.5, by - 9, 1, 2); // antenna
+
+    if (playerName) {
+      ctx.font = 'bold 8px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillText(playerName, cx + 1, by - 22);
+      ctx.fillStyle = '#f0e0a0'; ctx.fillText(playerName, cx, by - 23);
+    }
+    const pw2 = armyPower(player.army);
+    drawLabel(cx, cy + 16, pw2 + (bon > 0 ? '+' + bon : ''), '#f0c040');
+    return;
+  }
 
   // === MEDIEVAL LORD / KNIGHT ===
 
@@ -4812,6 +5007,179 @@ function drawTroll(cx, by, def) {
 }
 
 // -----------------------------------------------
+//  SECTION 10B: MODERN ENEMY SPRITES
+// -----------------------------------------------
+function drawModernInsurgent(cx, by, def) {
+  // Loose clothes, bandana, AK
+  ctx.fillStyle = '#6a5a4a'; ctx.fillRect(cx - 5, by + 3, 4, 7); ctx.fillRect(cx + 1, by + 3, 4, 7); // pants
+  ctx.fillStyle = '#7a6a5a'; ctx.fillRect(cx - 7, by - 5, 14, 10); // loose shirt
+  ctx.fillStyle = '#8a7a6a'; ctx.fillRect(cx - 6, by - 3, 12, 4); // chest rig
+  ctx.fillStyle = '#c8a070'; ctx.fillRect(cx - 10, by - 3, 4, 8); ctx.fillRect(cx + 6, by - 3, 4, 8); // arms
+  // AK-47
+  ctx.fillStyle = '#5d4037'; ctx.fillRect(cx + 8, by - 2, 8, 1.5); // wood
+  ctx.fillStyle = '#333'; ctx.fillRect(cx + 8, by - 3, 6, 1); // receiver
+  ctx.fillStyle = '#444'; ctx.fillRect(cx + 14, by - 3.5, 1, 2.5); // magazine
+  // Head with bandana
+  ctx.fillStyle = '#c8a070'; ctx.beginPath(); ctx.arc(cx, by - 11, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = def.color; ctx.fillRect(cx - 6, by - 15, 12, 3); // bandana
+  ctx.fillStyle = '#1a1a0a'; ctx.fillRect(cx - 2.5, by - 12, 1.5, 1.3); ctx.fillRect(cx + 1, by - 12, 1.5, 1.3); // eyes
+  ctx.fillStyle = '#3a2a1a'; ctx.fillRect(cx - 4, by - 9, 8, 1.5); // face wrap
+}
+
+function drawModernGuerrilla(cx, by, def) {
+  // Camo soldier with ammo vest and rifle
+  ctx.fillStyle = '#4a5a3a'; ctx.fillRect(cx - 6, by + 3, 5, 7); ctx.fillRect(cx + 1, by + 3, 5, 7);
+  ctx.fillStyle = def.color; ctx.fillRect(cx - 7, by - 6, 14, 11);
+  ctx.fillStyle = '#5a6a4a'; // ammo pouches
+  for (let p = 0; p < 3; p++) ctx.fillRect(cx - 5 + p * 3.5, by - 3, 2.5, 3);
+  ctx.fillStyle = '#4a5a3a'; ctx.fillRect(cx - 11, by - 4, 4, 9); ctx.fillRect(cx + 7, by - 4, 4, 9);
+  // Rifle
+  ctx.fillStyle = '#333'; ctx.fillRect(cx + 9, by - 4, 7, 1.5);
+  ctx.fillStyle = '#5d4037'; ctx.fillRect(cx + 9, by - 3, 4, 1.5);
+  // Head with patrol cap
+  ctx.fillStyle = '#c8a070'; ctx.beginPath(); ctx.arc(cx, by - 11, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = def.dark; ctx.beginPath(); ctx.arc(cx, by - 15, 7, Math.PI, 0); ctx.fill();
+  ctx.fillRect(cx - 7, by - 16, 14, 3);
+  ctx.fillStyle = '#1a1a0a'; ctx.fillRect(cx - 2.5, by - 12, 1.5, 1.3); ctx.fillRect(cx + 1, by - 12, 1.5, 1.3);
+}
+
+function drawModernEnemySniper(cx, by, def) {
+  // Ghillie suit sniper
+  ctx.fillStyle = '#4a5a30'; ctx.fillRect(cx - 5, by + 3, 4, 7); ctx.fillRect(cx + 1, by + 3, 4, 7);
+  ctx.fillStyle = '#5a6a40'; ctx.fillRect(cx - 6, by - 5, 12, 10);
+  // Ghillie strips
+  ctx.fillStyle = '#6a7a4a';
+  for (let s = 0; s < 5; s++) { ctx.fillRect(cx - 7 + s * 3, by - 4 + s, 2, 3); }
+  ctx.fillStyle = '#4a5a30'; ctx.fillRect(cx - 10, by - 3, 4, 8); ctx.fillRect(cx + 6, by - 3, 4, 8);
+  // Sniper rifle (long)
+  ctx.fillStyle = '#333'; ctx.fillRect(cx + 5, by - 1, 12, 1);
+  ctx.fillStyle = '#5d4037'; ctx.fillRect(cx + 5, by, 6, 1.5);
+  ctx.fillStyle = '#4fc3f7'; ctx.beginPath(); ctx.arc(cx + 12, by - 2, 1.2, 0, Math.PI * 2); ctx.fill(); // scope
+  // Head with ghillie hood
+  ctx.fillStyle = '#c8a070'; ctx.beginPath(); ctx.arc(cx, by - 11, 5.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#5a6a40'; ctx.beginPath(); ctx.arc(cx, by - 14, 6.5, Math.PI, 0); ctx.fill();
+  ctx.fillRect(cx - 6.5, by - 15, 13, 3);
+  ctx.fillStyle = '#6a7a4a'; // ghillie strips on hood
+  ctx.fillRect(cx - 5, by - 16, 2, 3); ctx.fillRect(cx + 3, by - 16, 2, 3);
+  ctx.fillStyle = '#1a1a0a'; ctx.fillRect(cx - 2, by - 12, 1.3, 1); ctx.fillRect(cx + 1, by - 12, 1.3, 1);
+}
+
+function drawModernAPC(cx, by, def) {
+  // Armored Personnel Carrier
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath(); ctx.ellipse(cx + 3, by + 12, 16, 6, 0.2, 0, Math.PI * 2); ctx.fill();
+  // Hull
+  const hullGrad = ctx.createLinearGradient(cx - 14, by - 4, cx + 14, by + 8);
+  hullGrad.addColorStop(0, '#5a6a4a'); hullGrad.addColorStop(0.5, '#4a5a3a'); hullGrad.addColorStop(1, '#3a4a2a');
+  ctx.fillStyle = hullGrad;
+  ctx.fillRect(cx - 14, by - 2, 28, 12);
+  // Angled front
+  ctx.fillStyle = '#4a5a3a';
+  ctx.beginPath(); ctx.moveTo(cx + 14, by - 2); ctx.lineTo(cx + 18, by + 2); ctx.lineTo(cx + 18, by + 8); ctx.lineTo(cx + 14, by + 10); ctx.closePath(); ctx.fill();
+  // Wheels (4 per side visible)
+  ctx.fillStyle = '#222';
+  for (let w = 0; w < 4; w++) {
+    ctx.beginPath(); ctx.arc(cx - 10 + w * 7, by + 12, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#444'; ctx.beginPath(); ctx.arc(cx - 10 + w * 7, by + 12, 1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#222';
+  }
+  // Turret on top
+  ctx.fillStyle = '#3a4a2a'; ctx.fillRect(cx - 3, by - 6, 8, 4);
+  ctx.fillStyle = '#333'; ctx.fillRect(cx + 5, by - 5, 8, 1.5); // gun
+  // Hatches
+  ctx.fillStyle = '#2a3a1a'; ctx.beginPath(); ctx.arc(cx + 1, by - 4, 2, 0, Math.PI * 2); ctx.fill();
+  // Side plates
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(cx - 12, by); ctx.lineTo(cx + 12, by); ctx.stroke();
+}
+
+function drawModernAttackChopper(cx, by, def) {
+  const rotorSpin = animFrame * 0.3;
+  // Tail boom
+  ctx.fillStyle = '#4a5a3a'; ctx.fillRect(cx - 18, by + 1, 14, 3);
+  // Tail rotor
+  ctx.strokeStyle = '#666'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx - 18, by - 2); ctx.lineTo(cx - 18, by + 6); ctx.stroke();
+  ctx.fillStyle = '#888'; ctx.beginPath(); ctx.arc(cx - 18, by + 2, 1.5, 0, Math.PI * 2); ctx.fill();
+  // Fuselage
+  const bodyGrad = ctx.createLinearGradient(cx - 5, by - 4, cx + 10, by + 6);
+  bodyGrad.addColorStop(0, def.color); bodyGrad.addColorStop(1, def.dark);
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath(); ctx.moveTo(cx - 4, by); ctx.lineTo(cx + 2, by - 6); ctx.lineTo(cx + 12, by - 4);
+  ctx.lineTo(cx + 14, by + 2); ctx.lineTo(cx + 8, by + 6); ctx.lineTo(cx - 2, by + 6); ctx.closePath(); ctx.fill();
+  // Cockpit glass
+  ctx.fillStyle = 'rgba(150,220,255,0.5)';
+  ctx.beginPath(); ctx.moveTo(cx + 8, by - 3); ctx.lineTo(cx + 14, by); ctx.lineTo(cx + 10, by + 2); ctx.lineTo(cx + 6, by); ctx.closePath(); ctx.fill();
+  // Stub wings with rockets
+  ctx.fillStyle = def.dark; ctx.fillRect(cx, by + 4, 8, 1.5);
+  ctx.fillStyle = '#666'; ctx.fillRect(cx + 1, by + 5, 1.5, 2); ctx.fillRect(cx + 5, by + 5, 1.5, 2); // rockets
+  // Skids
+  ctx.fillStyle = '#444'; ctx.fillRect(cx - 2, by + 8, 12, 0.8); ctx.fillRect(cx, by + 6, 1, 2); ctx.fillRect(cx + 8, by + 6, 1, 2);
+  // Main rotor
+  ctx.strokeStyle = 'rgba(100,100,100,0.6)'; ctx.lineWidth = 1.5;
+  const rLen = 20;
+  ctx.beginPath(); ctx.moveTo(cx + 5 - Math.cos(rotorSpin) * rLen, by - 6); ctx.lineTo(cx + 5 + Math.cos(rotorSpin) * rLen, by - 6); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx + 5 - Math.sin(rotorSpin) * rLen, by - 6); ctx.lineTo(cx + 5 + Math.sin(rotorSpin) * rLen, by - 6); ctx.stroke();
+  ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(cx + 5, by - 6, 2, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawModernEWSpecialist(cx, by, def) {
+  // Electronic Warfare - soldier with antenna backpack
+  ctx.fillStyle = '#3a3a4a'; ctx.fillRect(cx - 5, by + 3, 4, 7); ctx.fillRect(cx + 1, by + 3, 4, 7);
+  ctx.fillStyle = def.color; ctx.fillRect(cx - 7, by - 5, 14, 10);
+  ctx.fillStyle = '#444'; ctx.fillRect(cx - 8, by - 4, 4, 8); ctx.fillRect(cx + 4, by - 4, 4, 8); // arms
+  // Laptop in hand
+  ctx.fillStyle = '#333'; ctx.fillRect(cx + 7, by, 5, 3);
+  ctx.fillStyle = '#4fc3f7'; ctx.fillRect(cx + 7.5, by + 0.3, 4, 2); // screen glow
+  // Antenna backpack
+  ctx.fillStyle = '#444'; ctx.fillRect(cx - 10, by - 6, 4, 8);
+  ctx.fillStyle = '#666'; ctx.fillRect(cx - 9, by - 16, 1, 10); // antenna mast
+  ctx.fillStyle = '#4fc3f7'; ctx.beginPath(); ctx.arc(cx - 8.5, by - 17, 1.5, 0, Math.PI * 2); ctx.fill(); // antenna top
+  const antGlow = 0.4 + Math.sin(animFrame * 0.15) * 0.3;
+  ctx.fillStyle = 'rgba(79,195,247,' + antGlow + ')'; ctx.beginPath(); ctx.arc(cx - 8.5, by - 17, 3, 0, Math.PI * 2); ctx.fill();
+  // Head
+  ctx.fillStyle = '#c8a070'; ctx.beginPath(); ctx.arc(cx, by - 11, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(cx, by - 14, 6, Math.PI, 0); ctx.fill(); ctx.fillRect(cx - 6, by - 15, 12, 3);
+  // Headset
+  ctx.fillStyle = '#444'; ctx.fillRect(cx - 6, by - 12, 2, 3); ctx.fillRect(cx + 4, by - 12, 2, 3);
+  ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(cx - 5.5, by - 11, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#1a1a1a'; ctx.fillRect(cx - 2, by - 12, 1.3, 1); ctx.fillRect(cx + 1, by - 12, 1.3, 1);
+}
+
+function drawModernHeavyTank(cx, by, def) {
+  // Large main battle tank
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath(); ctx.ellipse(cx + 3, by + 14, 18, 6, 0.1, 0, Math.PI * 2); ctx.fill();
+  // Tracks
+  ctx.fillStyle = '#222';
+  ctx.fillRect(cx - 16, by + 5, 32, 8);
+  ctx.fillStyle = '#333';
+  ctx.fillRect(cx - 15, by + 6, 30, 6);
+  // Track wheels
+  ctx.fillStyle = '#444';
+  for (let w = 0; w < 5; w++) { ctx.beginPath(); ctx.arc(cx - 12 + w * 6, by + 9, 2, 0, Math.PI * 2); ctx.fill(); }
+  // Hull
+  const hullGrad = ctx.createLinearGradient(cx - 14, by - 2, cx + 14, by + 6);
+  hullGrad.addColorStop(0, '#5a6a3a'); hullGrad.addColorStop(0.5, '#4a5a2a'); hullGrad.addColorStop(1, '#3a4a1a');
+  ctx.fillStyle = hullGrad;
+  ctx.fillRect(cx - 14, by - 2, 28, 8);
+  // Angled front armor
+  ctx.fillStyle = '#4a5a2a';
+  ctx.beginPath(); ctx.moveTo(cx + 14, by - 2); ctx.lineTo(cx + 18, by + 2); ctx.lineTo(cx + 14, by + 6); ctx.closePath(); ctx.fill();
+  // Turret
+  ctx.fillStyle = '#3a4a1a';
+  ctx.beginPath(); ctx.ellipse(cx - 1, by - 5, 8, 5, 0, 0, Math.PI * 2); ctx.fill();
+  // Main gun barrel
+  ctx.fillStyle = '#333'; ctx.fillRect(cx + 6, by - 6, 14, 2.5);
+  ctx.fillStyle = '#444'; ctx.fillRect(cx + 18, by - 7, 2, 4); // muzzle brake
+  // Commander hatch
+  ctx.fillStyle = '#2a3a0a'; ctx.beginPath(); ctx.arc(cx - 3, by - 7, 2, 0, Math.PI * 2); ctx.fill();
+  // ERA blocks
+  ctx.fillStyle = '#4a5a2a';
+  ctx.fillRect(cx - 14, by, 3, 3); ctx.fillRect(cx - 14, by + 3, 3, 2);
+}
+
+// -----------------------------------------------
 //  SECTION 11: ENEMY DISPATCHER
 // -----------------------------------------------
 function drawEnemy(e, sx, sy) {
@@ -4837,14 +5205,26 @@ function drawEnemy(e, sx, sy) {
 
   const by = cy - 10 + bob;
 
-  switch (e.type) {
-    case 'bandit': drawBandit(cx, by, def); break;
-    case 'raider': drawRaider(cx, by, def); break;
-    case 'enemy_archer': drawEnemyArcher(cx, by, def); break;
-    case 'war_elephant': drawWarElephant(cx, by, def); break;
-    case 'dragon_rider': drawDragonRider(cx, by, def); break;
-    case 'dark_mage': drawDarkMage(cx, by, def); break;
-    case 'troll': drawTroll(cx, by, def); break;
+  if (modernMode) {
+    switch (e.type) {
+      case 'bandit': drawModernInsurgent(cx, by, def); break;
+      case 'raider': drawModernGuerrilla(cx, by, def); break;
+      case 'enemy_archer': drawModernEnemySniper(cx, by, def); break;
+      case 'war_elephant': drawModernAPC(cx, by, def); break;
+      case 'dragon_rider': drawModernAttackChopper(cx, by, def); break;
+      case 'dark_mage': drawModernEWSpecialist(cx, by, def); break;
+      case 'troll': drawModernHeavyTank(cx, by, def); break;
+    }
+  } else {
+    switch (e.type) {
+      case 'bandit': drawBandit(cx, by, def); break;
+      case 'raider': drawRaider(cx, by, def); break;
+      case 'enemy_archer': drawEnemyArcher(cx, by, def); break;
+      case 'war_elephant': drawWarElephant(cx, by, def); break;
+      case 'dragon_rider': drawDragonRider(cx, by, def); break;
+      case 'dark_mage': drawDarkMage(cx, by, def); break;
+      case 'troll': drawTroll(cx, by, def); break;
+    }
   }
 
   drawLabel(cx, cy + 14, e.str, def.color);
@@ -6928,6 +7308,190 @@ function drawBattle() {
   ctx.restore();
 }
 
+function drawModernBattleSprite(unit, sx, sy, cy, isPlayer, color, dark, enemyDef) {
+  const t = unit.type;
+  const pColor = isPlayer ? '#556b2f' : (enemyDef ? enemyDef.color : '#8b0000');
+  const pDark = isPlayer ? '#3a4a1a' : (enemyDef ? enemyDef.dark : '#5a0000');
+
+  if (t === 'knights' || (t === 'troll' && !isPlayer)) {
+    // Tank / Heavy Tank
+    const big = (t === 'troll');
+    const hw = big ? 16 : 12, hh = big ? 7 : 5;
+    // Tracks
+    ctx.fillStyle = '#222'; ctx.fillRect(sx - hw, cy + 1, hw * 2, hh);
+    ctx.fillStyle = '#333'; ctx.fillRect(sx - hw + 1, cy + 2, hw * 2 - 2, hh - 2);
+    for (let w = 0; w < (big ? 5 : 4); w++) { ctx.fillStyle = '#444'; ctx.beginPath(); ctx.arc(sx - hw + 3 + w * ((hw * 2 - 6) / (big ? 4 : 3)), cy + hh - 1, 1.5, 0, Math.PI * 2); ctx.fill(); }
+    // Hull
+    ctx.fillStyle = pColor; ctx.fillRect(sx - hw + 2, cy - 3, hw * 2 - 4, 5);
+    ctx.fillStyle = pDark; ctx.beginPath(); ctx.moveTo(sx + hw - 2, cy - 3); ctx.lineTo(sx + hw + 2, cy); ctx.lineTo(sx + hw - 2, cy + 2); ctx.closePath(); ctx.fill();
+    // Turret
+    ctx.fillStyle = pDark; ctx.beginPath(); ctx.ellipse(sx - 1, cy - 5, big ? 7 : 5, big ? 4 : 3, 0, 0, Math.PI * 2); ctx.fill();
+    // Barrel
+    ctx.fillStyle = '#333'; ctx.fillRect(sx + (big ? 5 : 4), cy - 6, big ? 14 : 10, 2);
+    ctx.fillStyle = '#444'; ctx.fillRect(sx + (big ? 17 : 12), cy - 7, 2, 4);
+  } else if (t === 'war_elephant') {
+    // APC
+    ctx.fillStyle = pColor; ctx.fillRect(sx - 12, cy - 2, 24, 10);
+    ctx.fillStyle = pDark; ctx.beginPath(); ctx.moveTo(sx + 12, cy - 2); ctx.lineTo(sx + 16, cy + 2); ctx.lineTo(sx + 16, cy + 6); ctx.lineTo(sx + 12, cy + 8); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#222';
+    for (let w = 0; w < 4; w++) { ctx.beginPath(); ctx.arc(sx - 8 + w * 6, cy + 10, 2, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = pDark; ctx.fillRect(sx - 2, cy - 5, 6, 3);
+    ctx.fillStyle = '#333'; ctx.fillRect(sx + 4, cy - 4, 7, 1.5);
+    // Viewport
+    ctx.fillStyle = 'rgba(150,220,255,0.4)'; ctx.fillRect(sx + 10, cy, 4, 2);
+  } else if (t === 'dragon_rider' || t === 'dragonriders') {
+    // Attack Helicopter
+    const rotorSpin = animFrame * 0.3;
+    // Tail boom
+    ctx.fillStyle = pDark; ctx.fillRect(sx - 16, cy + 1, 12, 2);
+    ctx.strokeStyle = '#666'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(sx - 16, cy - 1); ctx.lineTo(sx - 16, cy + 5); ctx.stroke();
+    // Fuselage
+    ctx.fillStyle = pColor;
+    ctx.beginPath(); ctx.moveTo(sx - 4, cy); ctx.lineTo(sx + 2, cy - 5); ctx.lineTo(sx + 10, cy - 3);
+    ctx.lineTo(sx + 12, cy + 2); ctx.lineTo(sx + 6, cy + 5); ctx.lineTo(sx - 2, cy + 5); ctx.closePath(); ctx.fill();
+    // Cockpit
+    ctx.fillStyle = 'rgba(150,220,255,0.5)';
+    ctx.beginPath(); ctx.moveTo(sx + 6, cy - 2); ctx.lineTo(sx + 12, cy); ctx.lineTo(sx + 8, cy + 2); ctx.lineTo(sx + 4, cy); ctx.closePath(); ctx.fill();
+    // Stub wings
+    ctx.fillStyle = pDark; ctx.fillRect(sx - 1, cy + 3, 7, 1.5);
+    ctx.fillStyle = '#666'; ctx.fillRect(sx, cy + 4, 1.5, 2); ctx.fillRect(sx + 4, cy + 4, 1.5, 2);
+    // Skids
+    ctx.fillStyle = '#444'; ctx.fillRect(sx - 2, cy + 7, 10, 0.8);
+    // Main rotor
+    ctx.strokeStyle = 'rgba(100,100,100,0.6)'; ctx.lineWidth = 1.5;
+    const rLen2 = 16;
+    ctx.beginPath(); ctx.moveTo(sx + 3 - Math.cos(rotorSpin) * rLen2, cy - 5); ctx.lineTo(sx + 3 + Math.cos(rotorSpin) * rLen2, cy - 5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx + 3 - Math.sin(rotorSpin) * rLen2, cy - 5); ctx.lineTo(sx + 3 + Math.sin(rotorSpin) * rLen2, cy - 5); ctx.stroke();
+    ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(sx + 3, cy - 5, 1.5, 0, Math.PI * 2); ctx.fill();
+  } else if (t === 'dark_mage') {
+    // EW Specialist
+    ctx.fillStyle = pDark; ctx.fillRect(sx - 3, cy + 2, 2.5, 6); ctx.fillRect(sx + 0.5, cy + 2, 2.5, 6);
+    ctx.fillStyle = pColor; ctx.fillRect(sx - 5, cy - 4, 10, 8);
+    ctx.fillStyle = '#444'; ctx.fillRect(sx - 8, cy - 2, 4, 7); ctx.fillRect(sx + 4, cy - 2, 4, 7);
+    // Laptop
+    ctx.fillStyle = '#333'; ctx.fillRect(sx + 6, cy, 5, 3);
+    ctx.fillStyle = '#4fc3f7'; ctx.fillRect(sx + 6.5, cy + 0.3, 4, 2);
+    // Antenna backpack
+    ctx.fillStyle = '#444'; ctx.fillRect(sx - 10, cy - 5, 3, 7);
+    ctx.fillStyle = '#666'; ctx.fillRect(sx - 9, cy - 14, 1, 9);
+    const antGlow2 = 0.4 + Math.sin(animFrame * 0.15) * 0.3;
+    ctx.fillStyle = 'rgba(79,195,247,' + antGlow2 + ')'; ctx.beginPath(); ctx.arc(sx - 8.5, cy - 15, 2.5, 0, Math.PI * 2); ctx.fill();
+    // Head with headset
+    ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(sx, cy - 8, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = pDark; ctx.beginPath(); ctx.arc(sx, cy - 10, 4, Math.PI, 0); ctx.fill(); ctx.fillRect(sx - 4, cy - 11, 8, 3);
+    ctx.fillStyle = '#444'; ctx.fillRect(sx - 5, cy - 9, 2, 2.5); ctx.fillRect(sx + 3, cy - 9, 2, 2.5);
+    ctx.fillStyle = '#111'; ctx.fillRect(sx - 2, cy - 9, 1.5, 1.5); ctx.fillRect(sx + 1, cy - 9, 1.5, 1.5);
+  } else if (t === 'catapults' || t === 'cannons') {
+    // Artillery / Howitzer
+    const isHow = (t === 'cannons');
+    // Platform with wheels
+    ctx.fillStyle = pColor; ctx.fillRect(sx - 8, cy + 2, 16, 3);
+    ctx.fillStyle = '#333';
+    ctx.beginPath(); ctx.arc(sx - 6, cy + 6, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx + 6, cy + 6, 2.5, 0, Math.PI * 2); ctx.fill();
+    // Barrel
+    ctx.fillStyle = '#444'; ctx.fillRect(sx - 2, cy - 4, 14, isHow ? 3 : 2.5);
+    ctx.fillStyle = '#333'; ctx.fillRect(sx + 10, cy - 5, 3, isHow ? 5 : 4);
+    // Gun shield
+    ctx.fillStyle = pDark; ctx.fillRect(sx - 4, cy - 2, 5, 4);
+    // Operator
+    ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(sx - 6, cy - 5, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = pColor; ctx.fillRect(sx - 8, cy - 3, 4, 4);
+    ctx.fillStyle = pDark; ctx.beginPath(); ctx.arc(sx - 6, cy - 7, 2, Math.PI, 0); ctx.fill();
+  } else if (t === 'healers') {
+    // Medic
+    ctx.fillStyle = pDark; ctx.fillRect(sx - 3, cy + 2, 2.5, 6); ctx.fillRect(sx + 0.5, cy + 2, 2.5, 6);
+    ctx.fillStyle = '#e8e8e8'; ctx.fillRect(sx - 5, cy - 4, 10, 8);
+    ctx.fillStyle = '#f44336'; ctx.fillRect(sx - 1, cy - 3, 2, 5); ctx.fillRect(sx - 3, cy - 1, 6, 2); // red cross
+    ctx.fillStyle = pColor; ctx.fillRect(sx - 8, cy - 2, 4, 7); ctx.fillRect(sx + 4, cy - 2, 4, 7);
+    // Medkit
+    ctx.fillStyle = '#fff'; ctx.fillRect(sx + 6, cy, 4, 3);
+    ctx.fillStyle = '#f44336'; ctx.fillRect(sx + 7, cy + 0.5, 2, 0.5); ctx.fillRect(sx + 7.5, cy + 0.2, 1, 1.3);
+    ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(sx, cy - 8, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = pDark; ctx.beginPath(); ctx.arc(sx, cy - 10, 4, Math.PI, 0); ctx.fill(); ctx.fillRect(sx - 4, cy - 11, 8, 3);
+    ctx.fillStyle = '#111'; ctx.fillRect(sx - 2, cy - 9, 1.5, 1.5); ctx.fillRect(sx + 1, cy - 9, 1.5, 1.5);
+  } else {
+    // Generic modern soldier (infantry, marines, snipers, MG, AT, flamethrower, spec ops)
+    // Legs
+    ctx.fillStyle = pDark; ctx.fillRect(sx - 3, cy + 2, 2.5, 6); ctx.fillRect(sx + 0.5, cy + 2, 2.5, 6);
+    // Body
+    ctx.fillStyle = pColor; ctx.fillRect(sx - 5, cy - 4, 10, 8);
+
+    if (t === 'assassins') {
+      // Special Ops - dark tactical
+      ctx.fillStyle = '#1a1a2e'; ctx.fillRect(sx - 5, cy - 4, 10, 8);
+      ctx.fillStyle = '#2a2a3e'; ctx.fillRect(sx - 8, cy - 2, 4, 7); ctx.fillRect(sx + 4, cy - 2, 4, 7);
+      // Suppressed weapon
+      ctx.fillStyle = '#333'; ctx.fillRect(sx + 6, cy - 3, 8, 1.2);
+      ctx.fillStyle = '#444'; ctx.fillRect(sx + 12, cy - 3.5, 3, 1.8); // suppressor
+      // NVG head
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(sx, cy - 8, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(sx, cy - 10, 4, Math.PI, 0); ctx.fill(); ctx.fillRect(sx - 4, cy - 11, 8, 3);
+      ctx.fillStyle = '#4caf50'; ctx.fillRect(sx - 3, cy - 10, 2.5, 1.5); ctx.fillRect(sx + 0.5, cy - 10, 2.5, 1.5); // NVG tubes
+    } else if (t === 'firelancers') {
+      // Flamethrower
+      ctx.fillStyle = pColor; ctx.fillRect(sx - 8, cy - 2, 4, 7); ctx.fillRect(sx + 4, cy - 2, 4, 7);
+      ctx.fillStyle = '#555'; ctx.fillRect(sx + 6, cy - 2, 7, 1.5); // nozzle
+      ctx.fillStyle = '#ff9800'; ctx.beginPath(); ctx.arc(sx + 14, cy - 1.5, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffeb3b'; ctx.beginPath(); ctx.arc(sx + 14, cy - 1.5, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#444'; ctx.fillRect(sx - 10, cy - 4, 4, 7); // fuel tanks
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(sx, cy - 8, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = pDark; ctx.beginPath(); ctx.arc(sx, cy - 10, 4, Math.PI, 0); ctx.fill(); ctx.fillRect(sx - 4, cy - 11, 8, 3);
+      ctx.fillStyle = '#111'; ctx.fillRect(sx - 2, cy - 9, 1.5, 1.5); ctx.fillRect(sx + 1, cy - 9, 1.5, 1.5);
+    } else if (t === 'pikemen') {
+      // Anti-Tank with RPG
+      ctx.fillStyle = pColor; ctx.fillRect(sx - 8, cy - 2, 4, 7); ctx.fillRect(sx + 4, cy - 2, 4, 7);
+      // RPG tube on shoulder
+      ctx.fillStyle = '#555'; ctx.fillRect(sx + 3, cy - 16, 2.5, 18);
+      ctx.fillStyle = pColor;
+      ctx.beginPath(); ctx.moveTo(sx + 3, cy - 16); ctx.lineTo(sx + 5.5, cy - 16); ctx.lineTo(sx + 4.25, cy - 20); ctx.closePath(); ctx.fill(); // warhead
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(sx, cy - 8, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = pDark; ctx.beginPath(); ctx.arc(sx, cy - 10, 4, Math.PI, 0); ctx.fill(); ctx.fillRect(sx - 4, cy - 11, 8, 3);
+      ctx.fillStyle = '#111'; ctx.fillRect(sx - 2, cy - 9, 1.5, 1.5); ctx.fillRect(sx + 1, cy - 9, 1.5, 1.5);
+    } else if (t === 'longbowmen' || t === 'enemy_archer') {
+      // Sniper with long rifle
+      ctx.fillStyle = pColor; ctx.fillRect(sx - 8, cy - 2, 4, 7); ctx.fillRect(sx + 4, cy - 2, 4, 7);
+      ctx.fillStyle = '#333'; ctx.fillRect(sx + 6, cy - 3, 10, 1); // long rifle
+      ctx.fillStyle = '#5d4037'; ctx.fillRect(sx + 6, cy - 2, 5, 1.5); // stock
+      ctx.fillStyle = '#4fc3f7'; ctx.beginPath(); ctx.arc(sx + 12, cy - 4, 1.2, 0, Math.PI * 2); ctx.fill(); // scope
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(sx, cy - 8, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#4a5a30'; ctx.beginPath(); ctx.arc(sx, cy - 10, 4, Math.PI, 0); ctx.fill(); ctx.fillRect(sx - 4, cy - 11, 8, 3);
+      // Ghillie strips
+      ctx.fillStyle = '#5a6a3a'; ctx.fillRect(sx - 6, cy - 4, 2, 3); ctx.fillRect(sx + 5, cy - 3, 2, 3);
+      ctx.fillStyle = '#111'; ctx.fillRect(sx - 2, cy - 9, 1.5, 1.5); ctx.fillRect(sx + 1, cy - 9, 1.5, 1.5);
+    } else if (t === 'crossbowmen') {
+      // Machine Gunner with belt-fed MG
+      ctx.fillStyle = pColor; ctx.fillRect(sx - 8, cy - 2, 4, 7); ctx.fillRect(sx + 4, cy - 2, 4, 7);
+      ctx.fillStyle = '#333'; ctx.fillRect(sx + 6, cy - 3, 8, 2); // MG body
+      ctx.fillStyle = '#ffd54f'; // ammo belt
+      ctx.fillRect(sx + 5, cy - 1, 1, 3);
+      for (let ab = 0; ab < 3; ab++) ctx.fillRect(sx + 4, cy + ab, 2, 0.5);
+      ctx.fillStyle = '#555'; ctx.fillRect(sx + 12, cy - 1, 1, 3); ctx.fillRect(sx + 11, cy - 1, 1, 3); // bipod
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(sx, cy - 8, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = pDark; ctx.beginPath(); ctx.arc(sx, cy - 10, 4, Math.PI, 0); ctx.fill(); ctx.fillRect(sx - 4, cy - 11, 8, 3);
+      ctx.fillStyle = '#111'; ctx.fillRect(sx - 2, cy - 9, 1.5, 1.5); ctx.fillRect(sx + 1, cy - 9, 1.5, 1.5);
+    } else if (t === 'menatarms' || t === 'raider' || t === 'bandit') {
+      // Marine / Insurgent / Guerrilla with assault rifle
+      ctx.fillStyle = pColor; ctx.fillRect(sx - 8, cy - 2, 4, 7); ctx.fillRect(sx + 4, cy - 2, 4, 7);
+      // Body armor vest
+      ctx.fillStyle = pDark; ctx.fillRect(sx - 4, cy - 3, 8, 5);
+      ctx.fillStyle = '#333'; ctx.fillRect(sx + 6, cy - 3, 7, 1.5); // rifle
+      ctx.fillStyle = '#444'; ctx.fillRect(sx + 9, cy - 2, 1.5, 2); // magazine
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(sx, cy - 8, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = pDark; ctx.beginPath(); ctx.arc(sx, cy - 10, 4, Math.PI, 0); ctx.fill(); ctx.fillRect(sx - 4, cy - 11, 8, 3);
+      ctx.fillStyle = '#111'; ctx.fillRect(sx - 2, cy - 9, 1.5, 1.5); ctx.fillRect(sx + 1, cy - 9, 1.5, 1.5);
+    } else {
+      // Default modern soldier
+      ctx.fillStyle = pColor; ctx.fillRect(sx - 8, cy - 2, 4, 7); ctx.fillRect(sx + 4, cy - 2, 4, 7);
+      ctx.fillStyle = '#333'; ctx.fillRect(sx + 6, cy - 3, 6, 1.5);
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(sx, cy - 8, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = pDark; ctx.beginPath(); ctx.arc(sx, cy - 10, 4, Math.PI, 0); ctx.fill(); ctx.fillRect(sx - 4, cy - 11, 8, 3);
+      ctx.fillStyle = '#111'; ctx.fillRect(sx - 2, cy - 9, 1.5, 1.5); ctx.fillRect(sx + 1, cy - 9, 1.5, 1.5);
+    }
+  }
+}
+
 function drawBattleUnit(unit, sx, sy, isPlayer, selected) {
   const bob = Math.sin(animFrame * 0.1 + unit.x * 3) * 1;
   const cy = sy - 10 + bob;
@@ -6964,7 +7528,9 @@ function drawBattleUnit(unit, sx, sy, isPlayer, selected) {
   const color = isPlayer ? '#4caf50' : (enemyDef ? enemyDef.color : '#e53935');
   const dark = isPlayer ? '#2e7d32' : (enemyDef ? enemyDef.dark : '#b71c1c');
 
-  if (unit.type === 'troll') {
+  if (modernMode) {
+    drawModernBattleSprite(unit, sx, sy, cy, isPlayer, color, dark, enemyDef);
+  } else if (unit.type === 'troll') {
     // Large green hulk with club and fangs
     // Legs
     ctx.fillStyle = dark; ctx.fillRect(sx - 5, cy + 2, 4, 6); ctx.fillRect(sx + 1, cy + 2, 4, 6);
