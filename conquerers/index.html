@@ -557,7 +557,9 @@ function displayName(type, category) {
   return null;
 }
 
-const BCOLS = 12, BROWS = 8;
+let BCOLS = 12, BROWS = 8;
+let wageWarMode = false;
+let wageWarSelected = [];
 let battle = null;
 let battleParticles = [], battleFloatingTexts = [], battleProjectiles = [];
 let deploySelectedType = null;
@@ -2759,87 +2761,79 @@ function showWageWarUI() {
   if (gameMode !== 'overworld' || !player) { msg('Can only wage war from the overworld!'); return; }
   const pw = armyPower(player.army);
   if (pw < 5) { msg('Your army is too weak to wage war!'); return; }
-
-  let html = '<div style="text-align:center;font-family:sans-serif;max-width:500px">';
-  html += '<h3 style="color:#ff8a65;margin:0 0 4px">WAGE WAR</h3>';
-  html += '<p style="font-size:10px;color:#aaa;margin:0 0 8px">Choose your enemy. A massive force will meet you on the battlefield!<br>Cost: <span style="color:#ffd54f">25 gold</span> | Your Power: <span style="color:#4fc3f7">' + pw + '</span></p>';
-
-  if (gold < 25) {
-    html += '<p style="color:#ef5350;font-size:12px">Not enough gold! (need 25g)</p>';
-    html += '<button onclick="document.getElementById(\'overlay\').classList.remove(\'show\')" style="margin-top:8px;padding:4px 16px">Close</button>';
-    html += '</div>';
-  } else {
-    const enemyTypes = Object.keys(ENEMY_TYPES);
-    for (const etype of enemyTypes) {
-      const edef = ENEMY_TYPES[etype];
-      const estats = ENEMY_BATTLE_STATS[etype];
-      const wavePower = Math.max(Math.floor(pw * 1.5), 10);
-      const numUnits = Math.max(3, Math.ceil(wavePower / estats.hp));
-      html += '<button onclick="wageWar(\'' + etype + '\');document.getElementById(\'overlay\').classList.remove(\'show\')" ';
-      html += 'style="display:block;width:90%;margin:3px auto;padding:5px 10px;font-size:11px;';
-      html += 'background:linear-gradient(180deg,' + edef.color + '33 0%,' + edef.dark + '66 100%);';
-      html += 'color:' + edef.color + ';border:1px solid ' + edef.color + '55;border-radius:4px;cursor:pointer">';
-      html += '<b>' + edef.name + '</b> — ~' + numUnits + ' units (HP:' + estats.hp + ' ATK:' + estats.atk + ')';
-      if (estats.heavy) html += ' <span style="color:#ff9800">[HEAVY]</span>';
-      html += '</button>';
-    }
-    html += '<button onclick="document.getElementById(\'overlay\').classList.remove(\'show\')" style="margin-top:8px;padding:4px 16px">Cancel</button>';
-    html += '</div>';
+  if (wageWarMode) {
+    // Cancel selection mode
+    wageWarMode = false;
+    wageWarSelected = [];
+    msg('War cancelled.');
+    draw();
+    return;
   }
-
-  document.getElementById('overlayTitle').textContent = '';
-  document.getElementById('overlayMsg').innerHTML = html;
-  document.getElementById('overlayBtn').style.display = 'none';
-  document.getElementById('overlayInput').style.display = 'none';
-  document.getElementById('overlay').classList.add('show');
-  overlayCallback = () => { document.getElementById('overlayBtn').style.display = ''; document.getElementById('overlayMsg').innerHTML = ''; };
+  // Enter enemy selection mode
+  wageWarMode = true;
+  wageWarSelected = [];
+  msg('WAGE WAR: Click enemies on the map to select them, then click START WAR!');
+  draw();
 }
 
-function wageWar(enemyType) {
-  if (gameMode !== 'overworld' || !player) return;
-  if (gold < 25) { msg('Not enough gold to wage war!'); return; }
-  gold -= 25;
+function startWageWar() {
+  if (!wageWarMode || wageWarSelected.length === 0) return;
 
-  const pw = armyPower(player.army);
-  const wavePower = Math.max(Math.floor(pw * 1.5), 10);
-  const estats = ENEMY_BATTLE_STATS[enemyType];
-  const numEnemies = Math.max(3, Math.ceil(wavePower / estats.hp));
+  const selectedEnemies = wageWarSelected.slice();
+  wageWarMode = false;
+  wageWarSelected = [];
+
+  // Use larger grid for Wage War
+  BCOLS = 16;
+  BROWS = 10;
 
   gameMode = 'deploy';
   deploySelectedType = null;
   battleParticles = [];
   battleFloatingTexts = [];
 
-  // Generate battle grid
+  // Generate larger battle grid
   const grid = [];
   for (let y = 0; y < BROWS; y++) {
     grid[y] = [];
     for (let x = 0; x < BCOLS; x++) {
-      if (x >= 3 && x < BCOLS - 3 && Math.random() < 0.08) grid[y][x] = 'wall';
+      if (x >= 4 && x < BCOLS - 4 && Math.random() < 0.08) grid[y][x] = 'wall';
       else grid[y][x] = 'grass';
     }
   }
 
-  // Generate large enemy wave - mix in some variety
-  const edef = ENEMY_TYPES[enemyType];
+  // Combine all selected enemies into one massive battle
   const enemyUnits = [];
-  for (let i = 0; i < numEnemies; i++) {
-    // Mix unit types for more interesting battles
-    let unitType = enemyType;
-    if (i > 2 && Math.random() < 0.25) {
-      const pool = Object.keys(ENEMY_BATTLE_STATS);
-      unitType = pool[Math.floor(Math.random() * pool.length)];
+  let totalStr = 0;
+  for (const en of selectedEnemies) {
+    const estats = ENEMY_BATTLE_STATS[en.type];
+    const numUnits = Math.max(1, Math.ceil(en.str / estats.hp));
+    totalStr += en.str;
+    for (let i = 0; i < numUnits; i++) {
+      let unitType = en.type;
+      if (i > 2 && Math.random() < 0.2) {
+        const pool = Object.keys(ENEMY_BATTLE_STATS);
+        unitType = pool[Math.floor(Math.random() * pool.length)];
+      }
+      const stats = ENEMY_BATTLE_STATS[unitType];
+      enemyUnits.push({
+        type: unitType, hp: stats.hp, maxHp: stats.hp,
+        atk: stats.atk, range: stats.range,
+        aoe: stats.aoe, heavy: stats.heavy || false,
+        x: 0, y: 0, vx: 0, vy: 0,
+        moveSpeed: stats.moveSpeed, attackRate: stats.attackRate, attackCD: 0,
+      });
     }
-    const stats = ENEMY_BATTLE_STATS[unitType];
-    const ex = BCOLS - 1 - (i % 3);
-    const ey = Math.floor(i / 3) % BROWS;
-    enemyUnits.push({
-      type: unitType, hp: stats.hp, maxHp: stats.hp,
-      atk: stats.atk, range: stats.range,
-      aoe: stats.aoe, heavy: stats.heavy || false,
-      x: ex, y: ey, vx: ex, vy: ey,
-      moveSpeed: stats.moveSpeed, attackRate: stats.attackRate, attackCD: 0,
-    });
+  }
+
+  // Position enemies on right side of larger grid
+  for (let i = 0; i < enemyUnits.length; i++) {
+    const ex = BCOLS - 1 - (i % 4);
+    const ey = Math.floor(i / 4) % BROWS;
+    enemyUnits[i].x = ex;
+    enemyUnits[i].y = ey;
+    enemyUnits[i].vx = ex;
+    enemyUnits[i].vy = ey;
   }
   // Fix overlapping positions
   for (let i = 1; i < enemyUnits.length; i++) {
@@ -2850,14 +2844,13 @@ function wageWar(enemyType) {
     enemyUnits[i].vy = enemyUnits[i].y;
   }
 
-  // Wage War gives extra gold reward on victory — store as bonus
-  const goldBonus = Math.ceil(wavePower * 0.4);
+  const goldBonus = Math.ceil(totalStr * 0.4);
 
   battle = {
     grid,
     playerUnits: [],
     enemyUnits,
-    enemyContext: { type: enemyType, str: wavePower, index: -1, isFort: false, arr: [], isWageWar: true, goldBonus },
+    enemyContext: { type: selectedEnemies[0].type, str: totalStr, index: -1, isFort: false, arr: [], isWageWar: true, goldBonus, wageWarEnemies: selectedEnemies },
     simSpeed: 1,
     simPaused: false,
     frameCount: 0,
@@ -2867,7 +2860,7 @@ function wageWar(enemyType) {
   for (const t of TROOP_ORDER) battle.deployArmy[t] = Array.isArray(player.army[t]) ? player.army[t].slice() : [];
 
   spawnParticles(player.x, player.y, '#ff5252', 15, 4);
-  msg('Wage War! A massive ' + edef.name + ' force awaits!');
+  msg('WAR! ' + enemyUnits.length + ' enemies from ' + selectedEnemies.length + ' groups!');
   notify('WAR DECLARED!', '#ff5252');
   updateHUD();
   draw();
@@ -3064,6 +3057,24 @@ function draw() {
       if (en) {
         const eiso = toIso(en.vx !== undefined ? en.vx : en.x, en.vy !== undefined ? en.vy : en.y);
         drawEnemy(en, eiso.x, eiso.y);
+        // Wage War selection indicator
+        if (wageWarMode && wageWarSelected.includes(en)) {
+          ctx.save();
+          ctx.strokeStyle = '#ff5252';
+          ctx.lineWidth = 2;
+          ctx.shadowColor = '#ff5252';
+          ctx.shadowBlur = 12;
+          ctx.beginPath();
+          ctx.ellipse(eiso.x, eiso.y + 4, 20, 10, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+          // Selection marker above enemy
+          ctx.fillStyle = '#ff5252';
+          ctx.font = 'bold 14px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('\u2694', eiso.x, eiso.y - 28);
+          ctx.restore();
+        }
       }
 
       // Followers
@@ -3130,6 +3141,33 @@ function draw() {
   vigGrad.addColorStop(1, 'rgba(0,0,0,0.45)');
   ctx.fillStyle = vigGrad;
   ctx.fillRect(0, 0, W, panelTop);
+
+  // Wage War selection overlay
+  if (wageWarMode) {
+    // Header banner
+    ctx.fillStyle = 'rgba(100,10,10,0.85)';
+    ctx.fillRect(W / 2 - 200, 8, 400, 32);
+    ctx.strokeStyle = '#ff5252';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(W / 2 - 200, 8, 400, 32);
+    ctx.fillStyle = '#ff8a65';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('WAGE WAR — Select Enemies (' + wageWarSelected.length + ' selected)', W / 2, 30);
+
+    // Start War button (only if enemies selected)
+    if (wageWarSelected.length > 0) {
+      const bx = W / 2 - 80, by = 46, bw = 160, bh = 28;
+      ctx.fillStyle = '#b71c1c';
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = '#ff5252';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bx, by, bw, bh);
+      ctx.fillStyle = '#ffcdd2';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillText('START WAR (' + wageWarSelected.length + ')', W / 2, by + 19);
+    }
+  }
 
   // Army panel at bottom
   drawArmyPanel();
@@ -6507,6 +6545,7 @@ function drawSettlementPanel() {
 // NOTE: toBattleIso, fromBattleIso, BATTLE_ISO_X, BATTLE_ISO_Y are defined in Part 1
 
 function enterBattle(arr, idx, isFort) {
+  wageWarMode = false; wageWarSelected = [];
   const entity = arr[idx];
   gameMode = 'deploy';
   deploySelectedType = null;
@@ -6933,7 +6972,7 @@ function battleVictory() {
 
   let capturedText = '';
   if (ctx2.isWageWar) {
-    // Wage War victory — extra gold bonus, captured troops
+    // Wage War victory — extra gold bonus, captured troops, remove enemies from map
     const bonus = ctx2.goldBonus || 0;
     gold += bonus;
     const yieldType = def.yields || 'militia';
@@ -6941,6 +6980,15 @@ function battleVictory() {
     const capturedCount = Math.max(2, Math.ceil(ctx2.str * 0.3 / yieldDef.str));
     addTroops(player.army, yieldType, capturedCount);
     capturedText = '+' + bonus + ' war bonus gold\n+' + capturedCount + ' ' + yieldDef.name;
+    // Remove all selected enemies from the overworld
+    if (ctx2.wageWarEnemies) {
+      for (const we of ctx2.wageWarEnemies) {
+        const idx = enemies.indexOf(we);
+        if (idx !== -1) enemies.splice(idx, 1);
+      }
+    }
+    // Restore normal grid size
+    BCOLS = 12; BROWS = 8;
   } else if (!ctx2.isFort) {
     const yieldType = def.yields || 'militia';
     const yieldDef = TROOP_TYPES[yieldType];
@@ -7013,6 +7061,8 @@ function battleDefeat() {
     const e = ctx2.arr[ctx2.index];
     if (e) e.str = Math.max(1, Math.ceil(e.str * (1 - dmgFraction)));
   }
+  // Restore normal grid size after Wage War
+  if (ctx2.isWageWar) { BCOLS = 12; BROWS = 8; }
 
   // Check if we lost a castle defense
   if (battle.turretBonus !== undefined) {
@@ -7085,8 +7135,9 @@ function handleDeployClick(mx, my) {
     return;
   }
 
-  // Place unit in deployment zone (left third: x < 3)
-  if (gx < 3 && deploySelectedType && battle.deployArmy[deploySelectedType] && battle.deployArmy[deploySelectedType].length > 0) {
+  // Place unit in deployment zone (left side)
+  const deployZone = BCOLS > 12 ? 4 : 3;
+  if (gx < deployZone && deploySelectedType && battle.deployArmy[deploySelectedType] && battle.deployArmy[deploySelectedType].length > 0) {
     const gy2 = Math.floor(gy);
     if (gy2 >= 0 && gy2 < BROWS && battle.grid[gy2] && battle.grid[gy2][Math.floor(gx)] === 'wall') return;
     if (battle.playerUnits.some(u => getEuclidDist(u, {x:gx,y:gy}) < 0.5)) return;
@@ -7211,7 +7262,8 @@ function drawBattle() {
       }
 
       // Deployment zone highlight
-      if (gameMode === 'deploy' && x < 3 && tileType !== 'wall') {
+      const dZone = BCOLS > 12 ? 4 : 3;
+      if (gameMode === 'deploy' && x < dZone && tileType !== 'wall') {
         ctx.fillStyle = 'rgba(79,195,247,0.1)';
         isoDiamondPath(iso.x, iso.y);
         ctx.fill();
@@ -8429,7 +8481,12 @@ document.addEventListener('keydown', e => {
       case 'ArrowRight': case 'd': case 'D':
         e.preventDefault(); tryMove(1, 0); break;
       case 'Escape':
-        if (buildMode) {
+        if (wageWarMode) {
+          wageWarMode = false;
+          wageWarSelected = [];
+          msg('War cancelled.');
+          draw();
+        } else if (buildMode) {
           buildMode = false;
           buildSelected = null;
           buildGhost = null;
@@ -8474,10 +8531,39 @@ canvas.addEventListener('click', e => {
   const my = (e.clientY - rect.top) * scaleY;
 
   if (gameMode === 'overworld') {
+    // Wage War "Start War" button click
+    if (wageWarMode && wageWarSelected.length > 0) {
+      const bx = W / 2 - 80, by = 46, bw = 160, bh = 28;
+      if (mx >= bx && mx <= bx + bw && my >= by && my <= by + bh) {
+        startWageWar();
+        return;
+      }
+    }
+
     if (my >= H - PANEL_H) return;
     const grid = fromIso(mx, my);
     // No COLS/ROWS bounds check (infinite map)
     if (!grassMap[grid.y] || grassMap[grid.y][grid.x] === undefined) return;
+
+    // Wage War enemy selection mode
+    if (wageWarMode) {
+      const clickedEnemy = enemies.find(en => {
+        const dist = Math.abs(en.x - grid.x) + Math.abs(en.y - grid.y);
+        return dist <= 1;
+      });
+      if (clickedEnemy) {
+        const idx = wageWarSelected.indexOf(clickedEnemy);
+        if (idx !== -1) {
+          wageWarSelected.splice(idx, 1);
+          msg('Deselected! ' + wageWarSelected.length + ' enemies selected. Click more or START WAR.');
+        } else {
+          wageWarSelected.push(clickedEnemy);
+          msg(wageWarSelected.length + ' enemies selected! Click more or START WAR.');
+        }
+        draw();
+      }
+      return;
+    }
 
     // Build placement (stays in build mode until ESC or B or can't afford)
     if (buildMode && buildSelected) {
