@@ -1506,14 +1506,47 @@ function shopBuy(type) {
   if (gameMode !== 'overworld') return;
   const def = TROOP_TYPES[type];
   if (!def) return;
-  const cost = def.cost;
-  const qty = def.qty || 1;
-  if (gold < cost) { msg('Not enough gold (' + cost + 'g needed)'); return; }
-  gold -= cost;
-  addTroops(player.army, type, qty);
+  // Show quantity sub-buttons beneath the clicked button
+  const existing = document.getElementById('shopSub_' + type);
+  // Close any other open sub-menus
+  document.querySelectorAll('.shop-sub').forEach(el => el.remove());
+  if (existing) return; // toggle off if already open
+  const btn = event.target;
+  const sub = document.createElement('div');
+  sub.id = 'shopSub_' + type;
+  sub.className = 'shop-sub';
+  sub.style.cssText = 'display:flex;gap:4px;justify-content:center;margin:2px 0 4px';
+  const baseQty = def.qty || 1;
+  const baseCost = def.cost;
+  [1, 5, 10].forEach(mult => {
+    const b = document.createElement('button');
+    const totalQty = baseQty * mult;
+    const totalCost = baseCost * mult;
+    b.textContent = '+' + totalQty + ' (' + totalCost + 'g)';
+    b.style.cssText = 'padding:3px 8px;font-size:0.75rem;cursor:pointer;background:#1a2a1a;color:' + def.color + ';border:1px solid ' + def.color + '55;border-radius:3px';
+    b.onclick = function(e) {
+      e.stopPropagation();
+      shopBuyAmount(type, mult);
+    };
+    sub.appendChild(b);
+  });
+  btn.parentNode.insertBefore(sub, btn.nextSibling);
+}
+
+function shopBuyAmount(type, mult) {
+  if (gameMode !== 'overworld') return;
+  const def = TROOP_TYPES[type];
+  if (!def) return;
+  const baseQty = def.qty || 1;
+  const totalQty = baseQty * mult;
+  const totalCost = def.cost * mult;
+  if (gold < totalCost) { msg('Not enough gold (' + totalCost + 'g needed)'); return; }
+  gold -= totalCost;
+  addTroops(player.army, type, totalQty);
   spawnParticles(player.x, player.y, def.color, 10, 3);
-  spawnFloatingText(player.x, player.y, '+' + qty + ' ' + def.name, def.color);
-  msg('Recruited ' + qty + ' ' + def.name + '!');
+  spawnFloatingText(player.x, player.y, '+' + totalQty + ' ' + def.name, def.color);
+  msg('Recruited ' + totalQty + ' ' + def.name + '!');
+  document.querySelectorAll('.shop-sub').forEach(el => el.remove());
   updateHUD();
   draw();
 }
