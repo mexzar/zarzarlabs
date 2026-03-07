@@ -7473,15 +7473,21 @@ function drawBattle() {
       ctx.fillStyle = '#fff'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
       ctx.fillText('START BATTLE (' + battle.playerUnits.length + ')', bx + bw / 2, by2 + 20);
     }
-    // Auto-Fill button
+    // Auto-Fill button (always visible during deploy, shows selected type or prompt)
+    const afBx = W - 160, afBw = 150, afBh = 28, afBy = 48;
     if (deploySelectedType && battle.deployArmy[deploySelectedType] && battle.deployArmy[deploySelectedType].length > 0) {
-      const bx = W - 160, bw = 150, bh = 26, by2 = 48;
       ctx.fillStyle = '#1565c0';
-      ctx.fillRect(bx, by2, bw, bh);
-      ctx.strokeStyle = '#42a5f5'; ctx.lineWidth = 1; ctx.strokeRect(bx, by2, bw, bh);
-      ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillRect(afBx, afBy, afBw, afBh);
+      ctx.strokeStyle = '#42a5f5'; ctx.lineWidth = 2; ctx.strokeRect(afBx, afBy, afBw, afBh);
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
       const tName = BATTLE_STATS[deploySelectedType].name;
-      ctx.fillText('AUTO-FILL ' + tName, bx + bw / 2, by2 + 17);
+      ctx.fillText('AUTO-FILL ' + tName, afBx + afBw / 2, afBy + 19);
+    } else {
+      ctx.fillStyle = '#263238';
+      ctx.fillRect(afBx, afBy, afBw, afBh);
+      ctx.strokeStyle = '#546e7a'; ctx.lineWidth = 1; ctx.strokeRect(afBx, afBy, afBw, afBh);
+      ctx.fillStyle = '#78909c'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('AUTO-FILL (select type)', afBx + afBw / 2, afBy + 19);
     }
   }
   if (gameMode === 'battle') {
