@@ -6517,6 +6517,7 @@ function drawSettlementPanel() {
 
 function enterBattle(arr, idx, isFort) {
   wageWarMode = false; wageWarSelected = [];
+  BCOLS = 12; BROWS = 8;
   const entity = arr[idx];
   gameMode = 'deploy';
   deploySelectedType = null;
@@ -6588,6 +6589,7 @@ function enterBattle(arr, idx, isFort) {
 function cancelDeploy() {
   // player.army was never modified during deploy, so just reset
   gameMode = 'overworld';
+  BCOLS = 12; BROWS = 8;
   battle = null;
   // Push player back so they don't re-trigger
   player.x = Math.max(0, player.x - player.lastDx);
@@ -7069,6 +7071,7 @@ function battleDefeat() {
 
 function handleResultClick() {
   gameMode = 'overworld';
+  BCOLS = 12; BROWS = 8;
   battle = null;
 }
 
