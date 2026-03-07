@@ -2800,11 +2800,12 @@ function startWageWar() {
   // Combine all selected enemies into one massive battle
   const enemyUnits = [];
   let totalStr = 0;
+  const maxSlots = 5 * BROWS; // 5 columns on right side x rows
   for (const en of selectedEnemies) {
     const estats = ENEMY_BATTLE_STATS[en.type];
     const numUnits = Math.max(1, Math.ceil(en.str / estats.hp));
     totalStr += en.str;
-    for (let i = 0; i < numUnits; i++) {
+    for (let i = 0; i < numUnits && enemyUnits.length < maxSlots; i++) {
       let unitType = en.type;
       if (i > 2 && Math.random() < 0.2) {
         const pool = Object.keys(ENEMY_BATTLE_STATS);
@@ -2823,17 +2824,19 @@ function startWageWar() {
 
   // Position enemies on right side of larger grid
   for (let i = 0; i < enemyUnits.length; i++) {
-    const ex = BCOLS - 1 - (i % 4);
-    const ey = Math.floor(i / 4) % BROWS;
+    const ex = BCOLS - 1 - (i % 5);
+    const ey = Math.floor(i / 5) % BROWS;
     enemyUnits[i].x = ex;
     enemyUnits[i].y = ey;
     enemyUnits[i].vx = ex;
     enemyUnits[i].vy = ey;
   }
-  // Fix overlapping positions
+  // Fix overlapping positions (with safety limit)
   for (let i = 1; i < enemyUnits.length; i++) {
-    while (enemyUnits.some((u, j) => j < i && u.x === enemyUnits[i].x && u.y === enemyUnits[i].y)) {
+    let tries = 0;
+    while (tries < BROWS && enemyUnits.some((u, j) => j < i && u.x === enemyUnits[i].x && u.y === enemyUnits[i].y)) {
       enemyUnits[i].y = (enemyUnits[i].y + 1) % BROWS;
+      tries++;
     }
     enemyUnits[i].vx = enemyUnits[i].x;
     enemyUnits[i].vy = enemyUnits[i].y;
