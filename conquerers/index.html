@@ -142,6 +142,7 @@ canvas {
 </div>
 <div style="margin-top:6px; display:flex; justify-content:center;">
   <button onclick="showWageWarUI()" style="background:linear-gradient(180deg,#6a1a1a 0%,#3a0a0a 100%) !important; color:#ff8a65 !important; border:2px solid #ff5252 !important; padding:8px 28px; border-radius:6px; cursor:pointer; font-size:0.95rem; font-weight:bold; letter-spacing:2px; text-shadow:0 0 8px rgba(255,82,82,0.5); box-shadow:0 2px 12px rgba(255,50,50,0.3);">WAGE WAR</button>
+  <button onclick="quickMine()" style="background:linear-gradient(180deg,#1a4a1a 0%,#0a2a0a 100%) !important; color:#a5d6a7 !important; border:2px solid #66bb6a !important; padding:8px 28px; border-radius:6px; cursor:pointer; font-size:0.95rem; font-weight:bold; letter-spacing:2px; text-shadow:0 0 8px rgba(102,187,106,0.5); box-shadow:0 2px 12px rgba(76,175,80,0.3); margin-left:8px;">QUICK MINE (250g)</button>
 </div>
 
 <div id="shop">
@@ -509,7 +510,7 @@ let fortMenuOpen = false, fortMenuIndex = -1;
 
 // Merged settlement state as globals
 let resources = { wood: 30, stone: 20, iron: 0, gold: 0, meat: 5, crops: 10 };
-let storageCap = { wood: 100, stone: 100, iron: 50, gold: 200, meat: 50, crops: 80 };
+let storageCap = { wood: 300, stone: 300, iron: 50, gold: 200, meat: 50, crops: 80 };
 let population = 4, popCap = 4, idleWorkers = 4;
 let buildings = [], nextBuildingId = 1;
 let researched = {}, currentResearch = null;
@@ -934,7 +935,7 @@ function newGame() {
   fortMenuOpen = false; fortMenuIndex = -1;
   // Settlers state init
   resources = { wood: 30, stone: 20, iron: 0, gold: 0, meat: 5, crops: 10 };
-  storageCap = { wood: 100, stone: 100, iron: 50, gold: 200, meat: 50, crops: 80 };
+  storageCap = { wood: 300, stone: 300, iron: 50, gold: 200, meat: 50, crops: 80 };
   population = 4; popCap = 4; idleWorkers = 4;
   buildings = []; nextBuildingId = 1;
   researched = {}; currentResearch = null;
@@ -2044,7 +2045,7 @@ function harvest() {
       break;
     }
     if (walls.has(k(hx, hy)) && !(waterMap[hy] && waterMap[hy][hx]) && !playerForts.some(f => f.gx === hx && f.gy === hy) && !forts.some(f => f.x === hx && f.y === hy)) {
-      const amt = 2 + toolBonus;
+      const amt = 4 + toolBonus;
       resources.stone = Math.min(storageCap.stone, resources.stone + amt);
       if (Math.random() < 0.2) {
         resources.iron = Math.min(storageCap.iron, resources.iron + 1);
@@ -2059,6 +2060,48 @@ function harvest() {
   }
   if (!harvested) msg('Nothing to harvest nearby');
   else { updateHUD(); draw(); }
+}
+
+function quickMine() {
+  if (gameMode !== 'overworld') return;
+  if (gold < 250) { msg('Need 250 gold for Quick Mine'); return; }
+  const radius = 15;
+  const px = player.x, py = player.y;
+  let woodGained = 0, stoneGained = 0, ironGained = 0;
+  const toolBonus = getToolBonus();
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      if (dx * dx + dy * dy > radius * radius) continue;
+      const hx = px + dx, hy = py + dy;
+      if (hx < 0 || hy < 0) continue;
+      if (treeMap[hy] && treeMap[hy][hx]) {
+        const amt = 2 + toolBonus;
+        resources.wood = Math.min(storageCap.wood, resources.wood + amt);
+        treeMap[hy][hx] = false;
+        woodGained += amt;
+      }
+      if (walls.has(k(hx, hy)) && !(waterMap[hy] && waterMap[hy][hx]) && !playerForts.some(f => f.gx === hx && f.gy === hy) && !forts.some(f => f.x === hx && f.y === hy)) {
+        const amt = 4 + toolBonus;
+        resources.stone = Math.min(storageCap.stone, resources.stone + amt);
+        if (Math.random() < 0.2) {
+          resources.iron = Math.min(storageCap.iron, resources.iron + 1);
+          ironGained++;
+        }
+        walls.delete(k(hx, hy));
+        stoneGained += amt;
+      }
+    }
+  }
+  if (woodGained === 0 && stoneGained === 0) { msg('Nothing to mine nearby!'); return; }
+  gold -= 250;
+  spawnParticles(px, py, '#66bb6a', 20, 5);
+  let summary = 'Quick Mine: ';
+  if (woodGained > 0) summary += '+' + woodGained + ' Wood ';
+  if (stoneGained > 0) summary += '+' + stoneGained + ' Stone ';
+  if (ironGained > 0) summary += '+' + ironGained + ' Iron';
+  spawnFloatingText(px, py, summary, '#a5d6a7');
+  msg(summary);
+  updateHUD(); draw();
 }
 
 // -----------------------------------------------
@@ -2722,7 +2765,7 @@ function loadGame(slot) {
 
   // Restore settlers state
   resources = data.resources || { wood: 30, stone: 20, iron: 0, gold: 0, meat: 5, crops: 10 };
-  storageCap = data.storageCap || { wood: 100, stone: 100, iron: 50, gold: 200, meat: 50, crops: 80 };
+  storageCap = data.storageCap || { wood: 300, stone: 300, iron: 50, gold: 200, meat: 50, crops: 80 };
   population = data.population || 4;
   popCap = data.popCap || 4;
   idleWorkers = data.idleWorkers || 4;
