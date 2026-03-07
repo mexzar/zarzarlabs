@@ -160,6 +160,7 @@ canvas {
   <button onclick="shopHealAll()">Heal All (20g)</button>
   <button onclick="shopScout()">Scout Map (15g)</button>
 </div>
+<div id="shopSubMenu" style="display:none; margin-top:4px; text-align:center;"></div>
 <div id="blacksmith-shop" style="margin-top:4px; display:flex; gap:6px; flex-wrap:wrap; justify-content:center;">
   <button onclick="engineerBuy('armorPiercing')" style="background:linear-gradient(180deg,#2a1a1a 0%,#1a0e0e 100%); color:#ff8a65; border:1px solid #5a2e2e; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:0.78rem;">Sharpened Blades Lv0 (30g)</button>
   <button onclick="engineerBuy('extendedMag')" style="background:linear-gradient(180deg,#2a1a1a 0%,#1a0e0e 100%); color:#ff8a65; border:1px solid #5a2e2e; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:0.78rem;">Longer Bows Lv0 (40g)</button>
@@ -1502,35 +1503,28 @@ function shopCost(type) {
   return TROOP_TYPES[type] ? TROOP_TYPES[type].cost : 10;
 }
 
+let shopSubType = null;
 function shopBuy(type) {
   if (gameMode !== 'overworld') return;
   const def = TROOP_TYPES[type];
   if (!def) return;
-  // Show quantity sub-buttons beneath the clicked button
-  const existing = document.getElementById('shopSub_' + type);
-  // Close any other open sub-menus
-  document.querySelectorAll('.shop-sub').forEach(el => el.remove());
-  if (existing) return; // toggle off if already open
-  const btn = event.target;
-  const sub = document.createElement('div');
-  sub.id = 'shopSub_' + type;
-  sub.className = 'shop-sub';
-  sub.style.cssText = 'display:flex;gap:4px;justify-content:center;margin:2px 0 4px';
+  const menu = document.getElementById('shopSubMenu');
+  // Toggle off if same type clicked again
+  if (shopSubType === type && menu.style.display !== 'none') {
+    menu.style.display = 'none';
+    shopSubType = null;
+    return;
+  }
+  shopSubType = type;
   const baseQty = def.qty || 1;
-  const baseCost = def.cost;
+  let html = '<span style="color:' + def.color + ';font-weight:bold;font-size:0.85rem;margin-right:8px">' + def.name + ':</span>';
   [1, 5, 10].forEach(mult => {
-    const b = document.createElement('button');
     const totalQty = baseQty * mult;
-    const totalCost = baseCost * mult;
-    b.textContent = '+' + totalQty + ' (' + totalCost + 'g)';
-    b.style.cssText = 'padding:3px 8px;font-size:0.75rem;cursor:pointer;background:#1a2a1a;color:' + def.color + ';border:1px solid ' + def.color + '55;border-radius:3px';
-    b.onclick = function(e) {
-      e.stopPropagation();
-      shopBuyAmount(type, mult);
-    };
-    sub.appendChild(b);
+    const totalCost = def.cost * mult;
+    html += '<button onclick="shopBuyAmount(\'' + type + '\',' + mult + ')" style="padding:4px 12px;font-size:0.8rem;cursor:pointer;margin:0 3px;background:linear-gradient(180deg,#1a2a1a 0%,#0e1a10 100%);color:' + def.color + ';border:1px solid ' + def.color + '88;border-radius:4px;font-weight:bold">+' + totalQty + ' (' + totalCost + 'g)</button>';
   });
-  btn.parentNode.insertBefore(sub, btn.nextSibling);
+  menu.innerHTML = html;
+  menu.style.display = 'block';
 }
 
 function shopBuyAmount(type, mult) {
@@ -1546,7 +1540,8 @@ function shopBuyAmount(type, mult) {
   spawnParticles(player.x, player.y, def.color, 10, 3);
   spawnFloatingText(player.x, player.y, '+' + totalQty + ' ' + def.name, def.color);
   msg('Recruited ' + totalQty + ' ' + def.name + '!');
-  document.querySelectorAll('.shop-sub').forEach(el => el.remove());
+  document.getElementById('shopSubMenu').style.display = 'none';
+  shopSubType = null;
   updateHUD();
   draw();
 }
