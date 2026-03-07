@@ -7073,6 +7073,34 @@ function handleResultClick() {
 }
 
 // ═════ DEPLOY PHASE ═════
+function autoFillDeploy() {
+  if (!deploySelectedType || !battle) return;
+  const dZone = BCOLS > 12 ? 4 : 3;
+  for (let x = 0; x < dZone; x++) {
+    for (let y = 0; y < BROWS; y++) {
+      if (!battle.deployArmy[deploySelectedType] || battle.deployArmy[deploySelectedType].length <= 0) break;
+      if (battle.grid[y] && battle.grid[y][x] === 'wall') continue;
+      if (battle.playerUnits.some(u => Math.abs(u.x - x) < 0.5 && Math.abs(u.y - y) < 0.5)) continue;
+      const stats = BATTLE_STATS[deploySelectedType];
+      const popped = battle.deployArmy[deploySelectedType].pop();
+      const persistHp = (typeof popped === 'object' && popped !== null) ? popped.hp : popped;
+      const baseMaxHp = stats.hp + upgrades.reinforced * 3;
+      const unitHp = Math.min(persistHp, baseMaxHp);
+      battle.playerUnits.push({
+        type: deploySelectedType,
+        hp: unitHp, maxHp: baseMaxHp, persistentHp: persistHp,
+        atk: stats.atk + upgrades.armorPiercing + engineerATKBonus,
+        range: stats.range + upgrades.extendedMag,
+        aoe: stats.aoe + (['pikemen','crossbowmen','catapults'].includes(deploySelectedType) ? upgrades.explosiveRounds : 0),
+        heavy: false,
+        x: x, y: y, vx: x, vy: y,
+        moveSpeed: stats.moveSpeed, attackRate: stats.attackRate, attackCD: 0,
+      });
+    }
+  }
+  if (!battle.deployArmy[deploySelectedType] || battle.deployArmy[deploySelectedType].length <= 0) deploySelectedType = null;
+}
+
 function handleDeployClick(mx, my) {
   const panelY = H - PANEL_H;
 
@@ -7086,6 +7114,12 @@ function handleDeployClick(mx, my) {
         deploySelectedType = type;
       }
     }
+    return;
+  }
+
+  // Check "Auto-Fill" button area (top right, below Start Battle)
+  if (mx >= W - 160 && mx <= W - 10 && my >= 48 && my <= 78 && deploySelectedType) {
+    autoFillDeploy();
     return;
   }
 
@@ -7429,14 +7463,26 @@ function drawBattle() {
     ctx.fillText('Click anywhere to continue', W / 2, 42);
   }
 
-  // Start Battle button
-  if (gameMode === 'deploy' && battle.playerUnits.length > 0) {
-    const bx = W - 160, bw = 150, bh = 30, by2 = 12;
-    ctx.fillStyle = '#2e7d32';
-    ctx.fillRect(bx, by2, bw, bh);
-    ctx.strokeStyle = '#4caf50'; ctx.lineWidth = 1; ctx.strokeRect(bx, by2, bw, bh);
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('START BATTLE (' + battle.playerUnits.length + ')', bx + bw / 2, by2 + 20);
+  // Start Battle button + Auto-Fill button
+  if (gameMode === 'deploy') {
+    if (battle.playerUnits.length > 0) {
+      const bx = W - 160, bw = 150, bh = 30, by2 = 12;
+      ctx.fillStyle = '#2e7d32';
+      ctx.fillRect(bx, by2, bw, bh);
+      ctx.strokeStyle = '#4caf50'; ctx.lineWidth = 1; ctx.strokeRect(bx, by2, bw, bh);
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('START BATTLE (' + battle.playerUnits.length + ')', bx + bw / 2, by2 + 20);
+    }
+    // Auto-Fill button
+    if (deploySelectedType && battle.deployArmy[deploySelectedType] && battle.deployArmy[deploySelectedType].length > 0) {
+      const bx = W - 160, bw = 150, bh = 26, by2 = 48;
+      ctx.fillStyle = '#1565c0';
+      ctx.fillRect(bx, by2, bw, bh);
+      ctx.strokeStyle = '#42a5f5'; ctx.lineWidth = 1; ctx.strokeRect(bx, by2, bw, bh);
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+      const tName = BATTLE_STATS[deploySelectedType].name;
+      ctx.fillText('AUTO-FILL ' + tName, bx + bw / 2, by2 + 17);
+    }
   }
   if (gameMode === 'battle') {
     // Pause/Play button
