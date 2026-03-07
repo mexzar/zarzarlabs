@@ -138,7 +138,7 @@ canvas {
   <button onclick="harvest()">Harvest (H)</button>
   <button onclick="showSettlementInfo()">Settlement</button>
   <button onclick="showResearchMenu()">Research</button>
-  <button onclick="toggleModernMode()" id="modernModeBtn">Modern Mode: OFF</button>
+  <button onclick="toggleModernMode()" id="modernModeBtn">Theme: Medieval</button>
 </div>
 <div style="margin-top:6px; display:flex; justify-content:center;">
   <button onclick="showWageWarUI()" style="background:linear-gradient(180deg,#6a1a1a 0%,#3a0a0a 100%) !important; color:#ff8a65 !important; border:2px solid #ff5252 !important; padding:8px 28px; border-radius:6px; cursor:pointer; font-size:0.95rem; font-weight:bold; letter-spacing:2px; text-shadow:0 0 8px rgba(255,82,82,0.5); box-shadow:0 2px 12px rgba(255,50,50,0.3);">WAGE WAR</button>
@@ -532,6 +532,8 @@ let playerVisual = { x: 1, y: 1 };
 // ===============================================
 let gameMode = 'overworld'; // 'overworld' | 'deploy' | 'battle' | 'battle_result'
 let modernMode = false;
+let mythicalMode = false;
+let gameTheme = 'medieval'; // 'medieval' | 'modern' | 'mythical'
 
 // Modern mode name mappings
 const MODERN_TROOP_NAMES = {
@@ -550,7 +552,36 @@ const MODERN_BUILDING_NAMES = {
   warehouse: 'Storage Facility', hospital: 'Field Hospital', temple: 'Command Center',
   academy: 'War College', blacksmith: 'Weapons Factory', port: 'Airfield'
 };
+
+// Mythical mode name mappings
+const MYTHICAL_TROOP_NAMES = {
+  militia: 'Goblins', longbowmen: 'Elven Archers', crossbowmen: 'Dwarven Gunners',
+  menatarms: 'Minotaurs', pikemen: 'Centaurs', knights: 'Griffon Riders',
+  catapults: 'Cyclops', healers: 'Unicorns', firelancers: 'Phoenixes',
+  assassins: 'Wraiths', cannons: 'Hydras', dragonriders: 'Elder Dragons'
+};
+const MYTHICAL_ENEMY_NAMES = {
+  bandit: 'Imp', raider: 'Orc Berserker', enemy_archer: 'Dark Elf Archer',
+  war_elephant: 'Basilisk', dragon_rider: 'Wyvern', dark_mage: 'Lich', troll: 'Ogre'
+};
+const MYTHICAL_BUILDING_NAMES = {
+  house: 'Fairy Dwelling', farm: 'Enchanted Grove', lumbermill: 'Treant Nursery', quarry: 'Crystal Mine',
+  mine: 'Mithril Forge', huntingLodge: 'Beast Den', market: 'Mystic Bazaar', watchtower: 'Scrying Tower',
+  warehouse: 'Dimensional Vault', hospital: 'Healing Spring', temple: 'Arcane Sanctum',
+  academy: 'School of Sorcery', blacksmith: 'Runesmith', port: 'Portal Nexus'
+};
+const MYTHICAL_UPGRADE_NAMES = {
+  armorPiercing: 'Enchanted Claws', extendedMag: 'Extended Reach',
+  reinforced: 'Arcane Wards', explosiveRounds: 'Elemental Fury'
+};
+
 function displayName(type, category) {
+  if (mythicalMode) {
+    if (category === 'troop') return MYTHICAL_TROOP_NAMES[type] || null;
+    if (category === 'enemy') return MYTHICAL_ENEMY_NAMES[type] || null;
+    if (category === 'building') return MYTHICAL_BUILDING_NAMES[type] || null;
+    return null;
+  }
   if (!modernMode) return null;
   if (category === 'troop') return MODERN_TROOP_NAMES[type] || null;
   if (category === 'enemy') return MODERN_ENEMY_NAMES[type] || null;
@@ -2606,6 +2637,7 @@ function saveGame(slot) {
       return out;
     })(),
     modernMode,
+    gameTheme,
     timestamp: Date.now(),
   };
   // Save player army as arrays of unit objects
@@ -2699,9 +2731,9 @@ function loadGame(slot) {
   researched = data.researched || {};
   currentResearch = data.currentResearch ? { ...data.currentResearch } : null;
 
-  // Restore modern mode
-  if (data.modernMode && !modernMode) toggleModernMode();
-  else if (!data.modernMode && modernMode) toggleModernMode();
+  // Restore theme mode
+  const savedTheme = data.gameTheme || (data.modernMode ? 'modern' : 'medieval');
+  while (gameTheme !== savedTheme) toggleModernMode();
 
   // Restore player army
   const army = newArmy();
@@ -2900,18 +2932,30 @@ const ORIG_UPGRADE_NAMES = {}; for (const k in UPGRADE_DEFS) ORIG_UPGRADE_NAMES[
 const MODERN_UPGRADE_NAMES = { armorPiercing: 'AP Rounds', extendedMag: 'Extended Range', reinforced: 'Body Armor', explosiveRounds: 'HE Shells' };
 
 function toggleModernMode() {
-  modernMode = !modernMode;
-  document.getElementById('modernModeBtn').textContent = 'Modern Mode: ' + (modernMode ? 'ON' : 'OFF');
+  // Cycle through 3 themes: medieval -> modern -> mythical -> medieval
+  if (gameTheme === 'medieval') {
+    gameTheme = 'modern'; modernMode = true; mythicalMode = false;
+  } else if (gameTheme === 'modern') {
+    gameTheme = 'mythical'; modernMode = false; mythicalMode = true;
+  } else {
+    gameTheme = 'medieval'; modernMode = false; mythicalMode = false;
+  }
+  const themeLabels = { medieval: 'Medieval', modern: 'Modern', mythical: 'Mythical' };
+  document.getElementById('modernModeBtn').textContent = 'Theme: ' + themeLabels[gameTheme];
+  // Pick name maps based on theme
+  const troopMap = mythicalMode ? MYTHICAL_TROOP_NAMES : (modernMode ? MODERN_TROOP_NAMES : null);
+  const enemyMap = mythicalMode ? MYTHICAL_ENEMY_NAMES : (modernMode ? MODERN_ENEMY_NAMES : null);
+  const upgradeMap = mythicalMode ? MYTHICAL_UPGRADE_NAMES : (modernMode ? MODERN_UPGRADE_NAMES : null);
   // Swap names on type objects so all code auto-updates
-  for (const k in TROOP_TYPES) TROOP_TYPES[k].name = modernMode ? (MODERN_TROOP_NAMES[k] || ORIG_TROOP_NAMES[k]) : ORIG_TROOP_NAMES[k];
-  for (const k in ENEMY_TYPES) ENEMY_TYPES[k].name = modernMode ? (MODERN_ENEMY_NAMES[k] || ORIG_ENEMY_NAMES[k]) : ORIG_ENEMY_NAMES[k];
-  for (const k in BATTLE_STATS) BATTLE_STATS[k].name = modernMode ? (MODERN_TROOP_NAMES[k] || ORIG_BATTLE_NAMES[k]) : ORIG_BATTLE_NAMES[k];
-  for (const k in UPGRADE_DEFS) UPGRADE_DEFS[k].name = modernMode ? (MODERN_UPGRADE_NAMES[k] || ORIG_UPGRADE_NAMES[k]) : ORIG_UPGRADE_NAMES[k];
+  for (const k in TROOP_TYPES) TROOP_TYPES[k].name = troopMap ? (troopMap[k] || ORIG_TROOP_NAMES[k]) : ORIG_TROOP_NAMES[k];
+  for (const k in ENEMY_TYPES) ENEMY_TYPES[k].name = enemyMap ? (enemyMap[k] || ORIG_ENEMY_NAMES[k]) : ORIG_ENEMY_NAMES[k];
+  for (const k in BATTLE_STATS) BATTLE_STATS[k].name = troopMap ? (troopMap[k] || ORIG_BATTLE_NAMES[k]) : ORIG_BATTLE_NAMES[k];
+  for (const k in UPGRADE_DEFS) UPGRADE_DEFS[k].name = upgradeMap ? (upgradeMap[k] || ORIG_UPGRADE_NAMES[k]) : ORIG_UPGRADE_NAMES[k];
   // Update title
-  document.querySelector('h1').textContent = modernMode ? 'COMMANDERS' : 'CONQUERERS';
-  document.getElementById('subtitle').textContent = modernMode
-    ? 'BUILD YOUR BASE & DOMINATE THE BATTLEFIELD'
-    : 'BUILD YOUR KINGDOM & CONQUER THE REALM';
+  const titles = { medieval: 'CONQUERERS', modern: 'COMMANDERS', mythical: 'MYTHFALL' };
+  const subtitles = { medieval: 'BUILD YOUR KINGDOM & CONQUER THE REALM', modern: 'BUILD YOUR BASE & DOMINATE THE BATTLEFIELD', mythical: 'COMMAND THE LEGENDS & RULE THE REALMS' };
+  document.querySelector('h1').textContent = titles[gameTheme];
+  document.getElementById('subtitle').textContent = subtitles[gameTheme];
   // Update shop buttons
   const shopBtns = document.querySelectorAll('#shop button');
   shopBtns.forEach(btn => {
@@ -2933,9 +2977,9 @@ function toggleModernMode() {
   updateBlacksmithButtons();
   // Update HUD labels
   const engLabel = document.querySelector('#eng-num .label');
-  if (engLabel) engLabel.textContent = modernMode ? 'Engineers ' : 'Smiths ';
+  if (engLabel) engLabel.textContent = mythicalMode ? 'Runesmiths ' : (modernMode ? 'Engineers ' : 'Smiths ');
   const castleLabel = document.querySelector('#forts-left .label');
-  if (castleLabel) castleLabel.textContent = modernMode ? 'Bases Left ' : 'Castles Left ';
+  if (castleLabel) castleLabel.textContent = mythicalMode ? 'Citadels Left ' : (modernMode ? 'Bases Left ' : 'Castles Left ');
   if (gameMode === 'overworld' && player) draw();
 }
 
@@ -3878,8 +3922,308 @@ function drawModernMiniTroop(x, y, type, def) {
   }
 }
 
+function drawMythicalMiniTroop(x, y, type, def) {
+  ctx.fillStyle = def.color;
+  switch (type) {
+    case 'militia': // Goblins
+      ctx.fillStyle = '#4a7a2e';
+      ctx.fillRect(x + 4, y + 3, 5, 7);
+      ctx.beginPath(); ctx.arc(x + 6, y + 1, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 3, y + 1); ctx.lineTo(x + 2, y - 4); ctx.lineTo(x + 5, y); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 8, y + 1); ctx.lineTo(x + 10, y - 4); ctx.lineTo(x + 7, y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ff3333';
+      ctx.fillRect(x + 5, y, 1, 1);
+      ctx.fillRect(x + 7, y, 1, 1);
+      ctx.fillStyle = def.color;
+      ctx.fillRect(x + 4, y + 3, 5, 4);
+      ctx.fillStyle = '#999';
+      ctx.fillRect(x + 10, y + 3, 4, 1);
+      ctx.fillStyle = '#6d4c41';
+      ctx.fillRect(x + 9, y + 2, 1.5, 3);
+      break;
+
+    case 'longbowmen': // Elven Archers
+      ctx.fillStyle = def.color;
+      ctx.fillRect(x + 4, y + 2, 4, 8);
+      ctx.fillStyle = '#f5deb3';
+      ctx.beginPath(); ctx.arc(x + 6, y, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 3, y - 1); ctx.lineTo(x + 1, y - 2); ctx.lineTo(x + 4, y + 1); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 9, y - 1); ctx.lineTo(x + 11, y - 2); ctx.lineTo(x + 8, y + 1); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#c4a63a';
+      ctx.fillRect(x + 3, y - 3, 6, 2);
+      ctx.strokeStyle = '#5d4037';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(x + 13, y + 2, 6, -Math.PI * 0.6, Math.PI * 0.6); ctx.stroke();
+      ctx.strokeStyle = '#ccc';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(x + 10, y - 3); ctx.lineTo(x + 10, y + 7); ctx.stroke();
+      ctx.strokeStyle = '#8B4513';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(x + 7, y + 2); ctx.lineTo(x + 14, y + 2); ctx.stroke();
+      break;
+
+    case 'crossbowmen': // Dwarven Gunners
+      ctx.fillStyle = def.color;
+      ctx.fillRect(x + 2, y + 3, 8, 7);
+      ctx.fillStyle = '#dbb896';
+      ctx.beginPath(); ctx.arc(x + 6, y + 1, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#777';
+      ctx.fillRect(x + 3, y - 3, 7, 3);
+      ctx.fillRect(x + 2, y - 1, 9, 1);
+      ctx.fillStyle = '#8B4513';
+      ctx.beginPath(); ctx.arc(x + 6, y + 3, 3, 0, Math.PI); ctx.fill();
+      ctx.fillRect(x + 3, y + 1, 6, 3);
+      ctx.fillStyle = '#333';
+      ctx.fillRect(x + 4, y, 1, 1);
+      ctx.fillRect(x + 7, y, 1, 1);
+      ctx.fillStyle = '#555';
+      ctx.fillRect(x + 10, y + 3, 5, 1.5);
+      ctx.fillRect(x + 12, y + 1, 1, 5);
+      ctx.fillStyle = '#44aaff';
+      ctx.fillRect(x + 13, y + 2, 1, 1);
+      ctx.fillRect(x + 11, y + 4, 1, 1);
+      break;
+
+    case 'menatarms': // Minotaurs
+      ctx.fillStyle = '#6d3a1f';
+      ctx.fillRect(x + 2, y + 2, 8, 8);
+      ctx.beginPath(); ctx.arc(x + 6, y, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#d4c49a';
+      ctx.beginPath(); ctx.moveTo(x + 3, y - 1); ctx.lineTo(x + 0, y - 5); ctx.lineTo(x + 4, y - 2); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 9, y - 1); ctx.lineTo(x + 12, y - 5); ctx.lineTo(x + 8, y - 2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#8B5E3C';
+      ctx.fillRect(x + 4, y + 1, 4, 2);
+      ctx.fillStyle = '#333';
+      ctx.fillRect(x + 5, y + 1, 1, 1);
+      ctx.fillRect(x + 7, y + 1, 1, 1);
+      ctx.fillStyle = '#ff2222';
+      ctx.fillRect(x + 4, y - 1, 1, 1);
+      ctx.fillRect(x + 7, y - 1, 1, 1);
+      ctx.fillStyle = def.color;
+      ctx.fillRect(x + 2, y + 2, 8, 3);
+      ctx.fillStyle = '#888';
+      ctx.beginPath(); ctx.moveTo(x + 12, y - 2); ctx.lineTo(x + 15, y + 1); ctx.lineTo(x + 12, y + 4); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#5d4037';
+      ctx.fillRect(x + 10, y - 2, 2, 9);
+      break;
+
+    case 'pikemen': // Centaurs
+      ctx.fillStyle = '#8B6914';
+      ctx.fillRect(x + 1, y + 6, 10, 4);
+      ctx.fillRect(x + 1, y + 10, 2, 3);
+      ctx.fillRect(x + 4, y + 10, 2, 3);
+      ctx.fillRect(x + 7, y + 10, 2, 3);
+      ctx.fillRect(x + 10, y + 10, 2, 3);
+      ctx.fillStyle = '#5a4010';
+      ctx.fillRect(x - 1, y + 6, 2, 2);
+      ctx.fillStyle = def.color;
+      ctx.fillRect(x + 7, y + 1, 4, 5);
+      ctx.fillStyle = '#dbb896';
+      ctx.beginPath(); ctx.arc(x + 9, y - 1, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#5a4010';
+      ctx.fillRect(x + 7, y - 3, 5, 2);
+      ctx.fillStyle = '#777';
+      ctx.fillRect(x + 12, y - 5, 1, 2);
+      ctx.fillStyle = '#8B5A2B';
+      ctx.fillRect(x + 12, y - 3, 1, 9);
+      break;
+
+    case 'knights': // Griffon Riders
+      ctx.fillStyle = '#c49a3c';
+      ctx.fillRect(x + 1, y + 5, 10, 5);
+      ctx.fillRect(x + 1, y + 10, 2, 3);
+      ctx.fillRect(x + 4, y + 10, 2, 3);
+      ctx.fillStyle = '#d4a030';
+      ctx.fillRect(x + 8, y + 10, 2, 2);
+      ctx.fillRect(x + 11, y + 10, 2, 2);
+      ctx.fillStyle = '#e8a000';
+      ctx.beginPath(); ctx.moveTo(x + 12, y + 6); ctx.lineTo(x + 15, y + 7); ctx.lineTo(x + 12, y + 8); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#f0e0a0';
+      ctx.beginPath(); ctx.arc(x + 11, y + 6, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff8800';
+      ctx.fillRect(x + 11, y + 5, 1, 1);
+      ctx.fillStyle = def.dark;
+      ctx.beginPath(); ctx.moveTo(x + 4, y + 5); ctx.lineTo(x - 2, y - 1); ctx.lineTo(x + 7, y + 3); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 8, y + 5); ctx.lineTo(x + 14, y - 1); ctx.lineTo(x + 10, y + 3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = def.color;
+      ctx.fillRect(x + 5, y + 1, 4, 4);
+      ctx.fillStyle = '#dbb896';
+      ctx.beginPath(); ctx.arc(x + 7, y - 1, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#888';
+      ctx.fillRect(x + 5, y - 3, 4, 2);
+      break;
+
+    case 'catapults': // Cyclops
+      ctx.fillStyle = '#7a6a55';
+      ctx.fillRect(x + 1, y + 2, 10, 9);
+      ctx.fillStyle = '#8a7a60';
+      ctx.beginPath(); ctx.arc(x + 6, y, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(x + 6, y, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#c22';
+      ctx.beginPath(); ctx.arc(x + 6, y, 1.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#111';
+      ctx.beginPath(); ctx.arc(x + 6, y, 0.6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#6a5a45';
+      ctx.fillRect(x + 3, y - 3, 7, 1.5);
+      ctx.fillStyle = def.color;
+      ctx.fillRect(x + 1, y + 6, 10, 4);
+      ctx.fillStyle = '#7a6a55';
+      ctx.fillRect(x + 1, y + 11, 4, 3);
+      ctx.fillRect(x + 7, y + 11, 4, 3);
+      ctx.fillStyle = '#999';
+      ctx.beginPath(); ctx.arc(x + 14, y - 1, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#777';
+      ctx.beginPath(); ctx.arc(x + 14, y - 1, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#7a6a55';
+      ctx.fillRect(x + 10, y + 1, 4, 2);
+      break;
+
+    case 'healers': // Unicorns
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(x + 1, y + 5, 10, 4);
+      ctx.fillStyle = '#eee';
+      ctx.fillRect(x + 1, y + 9, 2, 4);
+      ctx.fillRect(x + 4, y + 9, 2, 4);
+      ctx.fillRect(x + 7, y + 9, 2, 4);
+      ctx.fillRect(x + 10, y + 9, 2, 4);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(x + 9, y + 2, 3, 4);
+      ctx.beginPath(); ctx.arc(x + 11, y + 1, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#6633cc';
+      ctx.fillRect(x + 12, y, 1, 1);
+      ctx.fillStyle = '#ffdd44';
+      ctx.beginPath(); ctx.moveTo(x + 11, y - 2); ctx.lineTo(x + 12, y - 7); ctx.lineTo(x + 13, y - 2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = def.color;
+      ctx.globalAlpha = 0.4;
+      ctx.beginPath(); ctx.arc(x + 12, y - 5, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = def.color;
+      ctx.fillRect(x + 9, y + 1, 1, 4);
+      ctx.fillStyle = '#ddd';
+      ctx.fillRect(x - 1, y + 5, 2, 3);
+      break;
+
+    case 'firelancers': // Phoenixes
+      ctx.fillStyle = '#ff4400';
+      ctx.beginPath(); ctx.ellipse(x + 7, y + 4, 3, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = def.color;
+      ctx.beginPath(); ctx.moveTo(x + 4, y + 3); ctx.lineTo(x - 3, y - 3); ctx.lineTo(x - 1, y + 1); ctx.lineTo(x + 2, y + 5); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 10, y + 3); ctx.lineTo(x + 17, y - 3); ctx.lineTo(x + 15, y + 1); ctx.lineTo(x + 12, y + 5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffaa00';
+      ctx.beginPath(); ctx.moveTo(x + 4, y + 4); ctx.lineTo(x - 1, y); ctx.lineTo(x + 2, y + 5); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 10, y + 4); ctx.lineTo(x + 15, y); ctx.lineTo(x + 12, y + 5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ff6600';
+      ctx.beginPath(); ctx.arc(x + 7, y - 1, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffcc00';
+      ctx.beginPath(); ctx.moveTo(x + 9, y - 1); ctx.lineTo(x + 12, y); ctx.lineTo(x + 9, y + 1); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(x + 7, y - 2, 1, 1);
+      ctx.fillStyle = '#ff2200';
+      ctx.beginPath(); ctx.moveTo(x + 5, y + 7); ctx.lineTo(x + 7, y + 13); ctx.lineTo(x + 9, y + 7); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffaa00';
+      ctx.beginPath(); ctx.moveTo(x + 6, y + 7); ctx.lineTo(x + 7, y + 11); ctx.lineTo(x + 8, y + 7); ctx.closePath(); ctx.fill();
+      break;
+
+    case 'assassins': // Wraiths
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = def.color;
+      ctx.beginPath();
+      ctx.moveTo(x + 3, y - 3);
+      ctx.quadraticCurveTo(x + 6, y - 5, x + 9, y - 3);
+      ctx.lineTo(x + 11, y + 8);
+      ctx.quadraticCurveTo(x + 10, y + 11, x + 7, y + 12);
+      ctx.quadraticCurveTo(x + 4, y + 11, x + 1, y + 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = def.dark;
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(x + 3, y - 3);
+      ctx.quadraticCurveTo(x + 6, y - 6, x + 9, y - 3);
+      ctx.lineTo(x + 10, y + 2);
+      ctx.lineTo(x + 2, y + 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = '#00ffaa';
+      ctx.beginPath(); ctx.arc(x + 5, y, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 8, y, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = def.color;
+      ctx.beginPath(); ctx.moveTo(x + 1, y + 8); ctx.lineTo(x + 0, y + 13); ctx.lineTo(x + 3, y + 10); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 11, y + 8); ctx.lineTo(x + 13, y + 13); ctx.lineTo(x + 10, y + 10); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 6, y + 10); ctx.lineTo(x + 7, y + 14); ctx.lineTo(x + 8, y + 10); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1.0;
+      break;
+
+    case 'cannons': // Hydras
+      ctx.fillStyle = '#2d6b3f';
+      ctx.beginPath(); ctx.ellipse(x + 6, y + 7, 5, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = def.dark;
+      ctx.fillRect(x + 3, y + 6, 2, 2);
+      ctx.fillRect(x + 6, y + 8, 2, 2);
+      ctx.fillRect(x + 9, y + 6, 2, 2);
+      ctx.fillStyle = '#2d6b3f';
+      ctx.fillRect(x + 5, y + 1, 3, 5);
+      ctx.fillStyle = def.color;
+      ctx.beginPath(); ctx.arc(x + 1, y - 2, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(x + 3, y - 1, 3, 2);
+      ctx.beginPath(); ctx.arc(x + 6, y - 4, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(x + 5, y - 2, 3, 2);
+      ctx.beginPath(); ctx.arc(x + 11, y - 2, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(x + 8, y - 1, 3, 2);
+      ctx.fillStyle = '#ffcc00';
+      ctx.fillRect(x + 1, y - 3, 1, 1);
+      ctx.fillRect(x + 6, y - 5, 1, 1);
+      ctx.fillRect(x + 11, y - 3, 1, 1);
+      ctx.fillStyle = '#cc2222';
+      ctx.fillRect(x - 1, y - 2, 2, 1);
+      ctx.fillRect(x + 5, y - 4, 2, 1);
+      ctx.fillRect(x + 12, y - 2, 2, 1);
+      ctx.fillStyle = '#2d6b3f';
+      ctx.beginPath(); ctx.moveTo(x + 1, y + 7); ctx.quadraticCurveTo(x - 3, y + 10, x - 2, y + 13); ctx.lineTo(x, y + 12); ctx.quadraticCurveTo(x - 1, y + 9, x + 2, y + 8); ctx.closePath(); ctx.fill();
+      break;
+
+    case 'dragonriders': // Elder Dragons
+      ctx.fillStyle = def.color;
+      ctx.beginPath(); ctx.ellipse(x + 7, y + 5, 5, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(x + 10, y, 3, 5);
+      ctx.beginPath(); ctx.arc(x + 12, y - 2, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = def.dark;
+      ctx.beginPath(); ctx.moveTo(x + 14, y - 3); ctx.lineTo(x + 17, y - 2); ctx.lineTo(x + 14, y - 1); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ff4400';
+      ctx.fillRect(x + 13, y - 3, 1, 1);
+      ctx.fillStyle = '#d4c49a';
+      ctx.beginPath(); ctx.moveTo(x + 11, y - 4); ctx.lineTo(x + 10, y - 7); ctx.lineTo(x + 12, y - 4); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 13, y - 4); ctx.lineTo(x + 14, y - 7); ctx.lineTo(x + 14, y - 4); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = def.dark;
+      ctx.beginPath(); ctx.moveTo(x + 5, y + 2); ctx.lineTo(x - 3, y - 5); ctx.lineTo(x + 1, y - 2); ctx.lineTo(x + 4, y - 4); ctx.lineTo(x + 7, y + 1); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 9, y + 2); ctx.lineTo(x + 14, y - 5); ctx.lineTo(x + 12, y - 1); ctx.lineTo(x + 10, y + 1); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = def.color;
+      ctx.fillRect(x + 3, y + 8, 2, 4);
+      ctx.fillRect(x + 8, y + 8, 2, 4);
+      ctx.fillStyle = '#d4c49a';
+      ctx.fillRect(x + 2, y + 12, 4, 1);
+      ctx.fillRect(x + 7, y + 12, 4, 1);
+      ctx.fillStyle = def.color;
+      ctx.beginPath(); ctx.moveTo(x + 2, y + 5); ctx.quadraticCurveTo(x - 4, y + 6, x - 5, y + 3); ctx.lineTo(x - 3, y + 3); ctx.quadraticCurveTo(x - 3, y + 5, x + 2, y + 6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = def.dark;
+      ctx.beginPath(); ctx.moveTo(x - 5, y + 3); ctx.lineTo(x - 7, y + 1); ctx.lineTo(x - 3, y + 3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ff6600';
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath(); ctx.moveTo(x + 17, y - 2); ctx.lineTo(x + 21, y - 4); ctx.lineTo(x + 20, y - 1); ctx.lineTo(x + 22, y - 1); ctx.lineTo(x + 17, y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffcc00';
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath(); ctx.moveTo(x + 17, y - 2); ctx.lineTo(x + 20, y - 3); ctx.lineTo(x + 19, y - 1); ctx.lineTo(x + 17, y); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1.0;
+      break;
+  }
+}
+
 function drawMiniTroop(x, y, type, def) {
   if (modernMode) { drawModernMiniTroop(x, y, type, def); return; }
+  if (mythicalMode) { drawMythicalMiniTroop(x, y, type, def); return; }
   ctx.fillStyle = def.color;
   switch (type) {
     case 'militia':
@@ -4098,6 +4442,174 @@ function drawFollowerAt(sx, sy, type, idx) {
 }
 
 // -----------------------------------------------
+//  SECTION 9A: MYTHICAL PLAYER SPRITE (Archmage)
+// -----------------------------------------------
+function drawMythicalPlayer(cx, cy, by, bob, bon) {
+  // Magical rune circle around feet
+  ctx.save();
+  ctx.globalAlpha = 0.25 + 0.1 * Math.sin(Date.now() / 400);
+  ctx.strokeStyle = '#a060ff';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.ellipse(cx, by + 15, 14, 5, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 0.13 + 0.07 * Math.sin(Date.now() / 300);
+  ctx.strokeStyle = '#70d0ff';
+  ctx.beginPath();
+  ctx.ellipse(cx, by + 15, 11, 3.5, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Floating rune symbols
+  ctx.save();
+  for (let i = 0; i < 3; i++) {
+    const angle = Date.now() / 1200 + (i * Math.PI * 2 / 3);
+    const rx = cx + Math.cos(angle) * 12;
+    const ry = by + 8 + Math.sin(angle) * 4;
+    ctx.globalAlpha = 0.3 + 0.15 * Math.sin(Date.now() / 500 + i);
+    ctx.fillStyle = i % 2 === 0 ? '#c090ff' : '#60c0ff';
+    ctx.fillRect(rx - 1, ry - 1, 2, 2);
+  }
+  ctx.restore();
+
+  // Sandals
+  ctx.fillStyle = '#6b4226';
+  ctx.fillRect(cx - 6, by + 13, 5, 2.5);
+  ctx.fillRect(cx + 1, by + 13, 5, 2.5);
+  ctx.fillStyle = '#4a2a10';
+  ctx.fillRect(cx - 7, by + 15, 6, 1.2);
+  ctx.fillRect(cx, by + 15, 6, 1.2);
+
+  // Long flowing robe
+  const robeGrad = ctx.createLinearGradient(cx, by + 2, cx, by + 14);
+  robeGrad.addColorStop(0, '#4a1a7a');
+  robeGrad.addColorStop(0.4, '#3a1878');
+  robeGrad.addColorStop(1, '#1a1060');
+  ctx.fillStyle = robeGrad;
+  ctx.beginPath();
+  ctx.moveTo(cx - 6, by + 2);
+  ctx.lineTo(cx + 6, by + 2);
+  ctx.lineTo(cx + 9, by + 14);
+  ctx.lineTo(cx - 9, by + 14);
+  ctx.closePath();
+  ctx.fill();
+  // Robe trim
+  ctx.strokeStyle = '#c0a030';
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  ctx.moveTo(cx - 9, by + 14); ctx.lineTo(cx - 6, by + 2);
+  ctx.moveTo(cx + 9, by + 14); ctx.lineTo(cx + 6, by + 2);
+  ctx.stroke();
+
+  // Gold belt
+  ctx.fillStyle = '#c0a030';
+  ctx.fillRect(cx - 6, by + 5, 12, 1.5);
+  ctx.fillStyle = '#e0c050';
+  ctx.fillRect(cx - 1, by + 4.5, 2, 2.5);
+
+  // Wide sleeves
+  ctx.fillStyle = '#3e1870';
+  ctx.beginPath();
+  ctx.moveTo(cx - 6, by + 2); ctx.lineTo(cx - 13, by + 7); ctx.lineTo(cx - 10, by + 9); ctx.lineTo(cx - 6, by + 5);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx + 6, by + 2); ctx.lineTo(cx + 12, by + 5); ctx.lineTo(cx + 10, by + 8); ctx.lineTo(cx + 6, by + 5);
+  ctx.closePath(); ctx.fill();
+
+  // Hand
+  ctx.fillStyle = '#d4a574';
+  ctx.fillRect(cx - 12, by + 7, 2.5, 2.5);
+
+  // Staff
+  ctx.strokeStyle = '#6a4a2a';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.moveTo(cx + 11, by - 14); ctx.lineTo(cx + 11, by + 14); ctx.stroke();
+
+  // Staff crystal glow
+  ctx.save();
+  ctx.globalAlpha = 0.2 + 0.12 * Math.sin(Date.now() / 350);
+  const orbGlow = ctx.createRadialGradient(cx + 11, by - 16, 0, cx + 11, by - 16, 8);
+  orbGlow.addColorStop(0, '#d0a0ff');
+  orbGlow.addColorStop(1, 'rgba(100,50,200,0)');
+  ctx.fillStyle = orbGlow;
+  ctx.beginPath(); ctx.arc(cx + 11, by - 16, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // Crystal orb
+  const crystalGrad = ctx.createRadialGradient(cx + 10, by - 17, 0, cx + 11, by - 15, 3.5);
+  crystalGrad.addColorStop(0, '#f0d0ff');
+  crystalGrad.addColorStop(0.5, '#b060e0');
+  crystalGrad.addColorStop(1, '#6020a0');
+  ctx.fillStyle = crystalGrad;
+  ctx.beginPath(); ctx.arc(cx + 11, by - 16, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.beginPath(); ctx.arc(cx + 10, by - 17.5, 1, 0, Math.PI * 2); ctx.fill();
+
+  // Neck
+  ctx.fillStyle = '#d4a574';
+  ctx.fillRect(cx - 2, by - 1, 4, 2.5);
+
+  // Beard
+  const beardGrad = ctx.createLinearGradient(cx, by, cx, by + 7);
+  beardGrad.addColorStop(0, '#e8e8e8');
+  beardGrad.addColorStop(1, '#b0b0b8');
+  ctx.fillStyle = beardGrad;
+  ctx.beginPath();
+  ctx.moveTo(cx - 3, by + 1); ctx.lineTo(cx + 3, by + 1); ctx.lineTo(cx + 2, by + 6); ctx.lineTo(cx, by + 8); ctx.lineTo(cx - 2, by + 6);
+  ctx.closePath(); ctx.fill();
+
+  // Head
+  ctx.fillStyle = '#d4a574';
+  ctx.beginPath(); ctx.arc(cx, by - 4, 5, 0, Math.PI * 2); ctx.fill();
+
+  // Wizard hat
+  const hatGrad = ctx.createLinearGradient(cx, by - 20, cx, by - 4);
+  hatGrad.addColorStop(0, '#2a0850');
+  hatGrad.addColorStop(0.6, '#3e1878');
+  hatGrad.addColorStop(1, '#4a1a7a');
+  ctx.fillStyle = hatGrad;
+  ctx.beginPath(); ctx.ellipse(cx, by - 7, 8, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx - 6, by - 8); ctx.lineTo(cx + 2, by - 22); ctx.lineTo(cx + 6, by - 8);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#4a1a7a'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(cx + 2, by - 22); ctx.quadraticCurveTo(cx + 5, by - 21, cx + 6, by - 18); ctx.stroke();
+  // Hat band
+  ctx.fillStyle = '#c0a030';
+  ctx.fillRect(cx - 6, by - 9, 12, 1.5);
+  ctx.fillStyle = '#e0c050';
+  ctx.beginPath(); ctx.arc(cx, by - 9, 1.2, 0, Math.PI * 2); ctx.fill();
+
+  // Glowing eyes
+  ctx.save();
+  ctx.globalAlpha = 0.7 + 0.3 * Math.sin(Date.now() / 500);
+  ctx.fillStyle = '#80d0ff';
+  ctx.fillRect(cx - 3, by - 5, 2, 1.5);
+  ctx.fillRect(cx + 1, by - 5, 2, 1.5);
+  ctx.restore();
+
+  // Sparkle particles
+  ctx.save();
+  for (let i = 0; i < 4; i++) {
+    const t = (Date.now() / 800 + i * 0.7) % 2;
+    const spx = cx - 6 + (i * 4) + Math.sin(Date.now() / 600 + i) * 2;
+    const spy = by + 10 - t * 14;
+    ctx.globalAlpha = Math.max(0, 0.5 - t * 0.25);
+    ctx.fillStyle = i % 2 === 0 ? '#d0a0ff' : '#a0d0ff';
+    ctx.fillRect(spx - 0.5, spy - 0.5, 1.2, 1.2);
+  }
+  ctx.restore();
+
+  // Name label
+  if (playerName) {
+    ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#000'; ctx.fillText(playerName, cx + 1, by - 23 + 1);
+    ctx.fillStyle = '#f0e0a0'; ctx.fillText(playerName, cx, by - 23);
+  }
+  const pw2 = armyPower(player.army);
+  drawLabel(cx, cy + 16, pw2 + (bon > 0 ? '+' + bon : ''), '#f0c040');
+  return;
+}
+
 //  SECTION 9: PLAYER SPRITE (Medieval Lord/Knight)
 // -----------------------------------------------
 function drawPlayer(sx, sy) {
@@ -4125,6 +4637,11 @@ function drawPlayer(sx, sy) {
   ctx.beginPath(); ctx.ellipse(cx + 3, cy + 6, 12, 4.5, 0.2, 0, Math.PI * 2); ctx.fill();
 
   const by = cy - 10 + bob;
+
+  if (mythicalMode) {
+    drawMythicalPlayer(cx, cy, by, bob, bon);
+    return;
+  }
 
   if (modernMode) {
     // === MODERN COMMANDER ===
@@ -4500,6 +5017,333 @@ function drawPlayer(sx, sy) {
 // -----------------------------------------------
 //  SECTION 10: ENEMY SPRITES (Medieval)
 // -----------------------------------------------
+
+// --- MYTHICAL ENEMY SPRITES ---
+function drawMythicalImp(cx, by, def) {
+  ctx.strokeStyle = '#b71c1c'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(cx - 2, by + 12); ctx.quadraticCurveTo(cx - 16, by + 8, cx - 14, by - 2); ctx.stroke();
+  ctx.fillStyle = '#d32f2f';
+  ctx.beginPath(); ctx.moveTo(cx - 14, by - 2); ctx.lineTo(cx - 17, by - 5); ctx.lineTo(cx - 12, by - 3); ctx.closePath(); ctx.fill();
+  // Wings
+  ctx.fillStyle = '#8b0000'; ctx.globalAlpha = 0.85;
+  ctx.beginPath(); ctx.moveTo(cx - 6, by + 1); ctx.quadraticCurveTo(cx - 22, by - 10, cx - 18, by - 4);
+  ctx.lineTo(cx - 20, by + 2); ctx.quadraticCurveTo(cx - 16, by - 2, cx - 14, by + 5);
+  ctx.lineTo(cx - 16, by + 10); ctx.quadraticCurveTo(cx - 10, by + 4, cx - 6, by + 4); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx + 6, by + 1); ctx.quadraticCurveTo(cx + 22, by - 10, cx + 18, by - 4);
+  ctx.lineTo(cx + 20, by + 2); ctx.quadraticCurveTo(cx + 16, by - 2, cx + 14, by + 5);
+  ctx.lineTo(cx + 16, by + 10); ctx.quadraticCurveTo(cx + 10, by + 4, cx + 6, by + 4); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1.0;
+  // Body
+  ctx.fillStyle = '#c62828'; ctx.beginPath(); ctx.ellipse(cx, by + 6, 6, 7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = def.color; ctx.beginPath(); ctx.ellipse(cx, by + 8, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
+  // Arms/claws
+  ctx.fillStyle = '#c62828'; ctx.fillRect(cx - 9, by + 3, 3, 6); ctx.fillRect(cx + 6, by + 3, 3, 6);
+  ctx.fillStyle = '#333';
+  ctx.beginPath(); ctx.moveTo(cx - 9, by + 9); ctx.lineTo(cx - 11, by + 12); ctx.lineTo(cx - 9, by + 10); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx + 9, by + 9); ctx.lineTo(cx + 11, by + 12); ctx.lineTo(cx + 9, by + 10); ctx.fill();
+  // Legs
+  ctx.fillStyle = '#b71c1c'; ctx.fillRect(cx - 4, by + 13, 3, 5); ctx.fillRect(cx + 1, by + 13, 3, 5);
+  ctx.fillStyle = '#333'; ctx.fillRect(cx - 5, by + 17, 5, 2); ctx.fillRect(cx + 0, by + 17, 5, 2);
+  // Head
+  ctx.fillStyle = '#d32f2f'; ctx.beginPath(); ctx.arc(cx, by - 4, 5.5, 0, Math.PI * 2); ctx.fill();
+  // Horns
+  ctx.fillStyle = '#333';
+  ctx.beginPath(); ctx.moveTo(cx - 4, by - 8); ctx.lineTo(cx - 7, by - 15); ctx.lineTo(cx - 2, by - 8); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx + 4, by - 8); ctx.lineTo(cx + 7, by - 15); ctx.lineTo(cx + 2, by - 8); ctx.closePath(); ctx.fill();
+  // Grin
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, by - 2, 3.5, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.fillRect(cx - 2, by - 2, 1.2, 1.2); ctx.fillRect(cx + 1, by - 2, 1.2, 1.2);
+  // Eyes
+  ctx.fillStyle = '#ffeb3b';
+  ctx.beginPath(); ctx.arc(cx - 2.5, by - 5, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 2.5, by - 5, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.fillRect(cx - 3, by - 5.5, 1, 1); ctx.fillRect(cx + 2, by - 5.5, 1, 1);
+}
+
+function drawMythicalOrcBerserker(cx, by, def) {
+  // Axe behind
+  ctx.fillStyle = '#5d4037'; ctx.fillRect(cx + 10, by - 12, 2.5, 30);
+  ctx.fillStyle = '#78909c';
+  ctx.beginPath(); ctx.moveTo(cx + 12, by - 10); ctx.quadraticCurveTo(cx + 22, by - 6, cx + 12, by - 2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#b0bec5';
+  ctx.beginPath(); ctx.moveTo(cx + 12, by - 9); ctx.quadraticCurveTo(cx + 19, by - 6, cx + 12, by - 3); ctx.closePath(); ctx.fill();
+  // Body
+  ctx.fillStyle = '#2e7d32'; ctx.fillRect(cx - 10, by, 20, 14);
+  // Shoulder armor
+  ctx.fillStyle = def.color;
+  ctx.beginPath(); ctx.arc(cx - 10, by + 2, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 10, by + 2, 5, 0, Math.PI * 2); ctx.fill();
+  // Spikes
+  ctx.fillStyle = '#37474f';
+  ctx.beginPath(); ctx.moveTo(cx - 13, by); ctx.lineTo(cx - 16, by - 5); ctx.lineTo(cx - 11, by + 1); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx + 13, by); ctx.lineTo(cx + 16, by - 5); ctx.lineTo(cx + 11, by + 1); ctx.closePath(); ctx.fill();
+  // Chest armor
+  ctx.fillStyle = '#546e7a'; ctx.fillRect(cx - 6, by + 2, 12, 8);
+  // Belt
+  ctx.fillStyle = '#3e2723'; ctx.fillRect(cx - 10, by + 12, 20, 3);
+  ctx.fillStyle = '#ff8f00'; ctx.fillRect(cx - 2, by + 12, 4, 3);
+  // Arms
+  ctx.fillStyle = '#388e3c'; ctx.fillRect(cx - 14, by + 2, 4, 10); ctx.fillRect(cx + 10, by + 2, 4, 10);
+  // Legs
+  ctx.fillStyle = '#33691e'; ctx.fillRect(cx - 7, by + 15, 5, 8); ctx.fillRect(cx + 2, by + 15, 5, 8);
+  ctx.fillStyle = '#3e2723'; ctx.fillRect(cx - 8, by + 21, 7, 3); ctx.fillRect(cx + 1, by + 21, 7, 3);
+  // Head
+  ctx.fillStyle = '#388e3c'; ctx.beginPath(); ctx.arc(cx, by - 5, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(cx - 6, by - 4, 12, 5);
+  // War paint
+  ctx.fillStyle = '#c62828'; ctx.fillRect(cx - 5, by - 8, 2, 4); ctx.fillRect(cx + 3, by - 8, 2, 4);
+  // Tusks
+  ctx.fillStyle = '#f5f5dc';
+  ctx.beginPath(); ctx.moveTo(cx - 4, by - 1); ctx.lineTo(cx - 5, by + 3); ctx.lineTo(cx - 3, by); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx + 4, by - 1); ctx.lineTo(cx + 5, by + 3); ctx.lineTo(cx + 3, by); ctx.closePath(); ctx.fill();
+  // Eyes
+  ctx.fillStyle = '#ff1744'; ctx.fillRect(cx - 4, by - 6, 2.5, 2); ctx.fillRect(cx + 1.5, by - 6, 2.5, 2);
+  ctx.fillStyle = '#111'; ctx.fillRect(cx - 3, by - 5.5, 1, 1); ctx.fillRect(cx + 2.5, by - 5.5, 1, 1);
+}
+
+function drawMythicalDarkElfArcher(cx, by, def) {
+  // Bow
+  ctx.strokeStyle = '#1a1a2e'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx - 14, by - 10); ctx.quadraticCurveTo(cx - 22, by + 4, cx - 14, by + 18); ctx.stroke();
+  ctx.strokeStyle = '#9575cd'; ctx.lineWidth = 0.7;
+  ctx.beginPath(); ctx.moveTo(cx - 14, by - 10); ctx.lineTo(cx - 14, by + 18); ctx.stroke();
+  ctx.fillStyle = '#7c4dff';
+  ctx.beginPath(); ctx.arc(cx - 14, by - 10, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx - 14, by + 18, 1.5, 0, Math.PI * 2); ctx.fill();
+  // Arrow
+  ctx.fillStyle = '#5d4037'; ctx.fillRect(cx - 14, by + 3, 16, 1);
+  ctx.fillStyle = '#b0bec5';
+  ctx.beginPath(); ctx.moveTo(cx + 2, by + 3.5); ctx.lineTo(cx + 5, by + 2); ctx.lineTo(cx + 5, by + 5); ctx.closePath(); ctx.fill();
+  // Body
+  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(cx - 5, by + 1, 10, 12);
+  ctx.fillStyle = def.color; ctx.fillRect(cx - 5, by + 1, 10, 1); ctx.fillRect(cx - 5, by + 6, 10, 1); ctx.fillRect(cx - 5, by + 12, 10, 1);
+  ctx.fillStyle = '#4a148c'; ctx.fillRect(cx - 1, by + 2, 2, 10);
+  // Arms
+  ctx.fillStyle = '#4a148c'; ctx.fillRect(cx - 8, by + 2, 3, 8); ctx.fillRect(cx + 5, by + 2, 3, 8);
+  ctx.fillStyle = '#6a1b9a'; ctx.fillRect(cx - 8, by + 9, 3, 2); ctx.fillRect(cx + 5, by + 9, 3, 2);
+  // Legs
+  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(cx - 4, by + 13, 3, 7); ctx.fillRect(cx + 1, by + 13, 3, 7);
+  ctx.fillStyle = '#0d0d1a'; ctx.fillRect(cx - 5, by + 18, 4, 3); ctx.fillRect(cx + 1, by + 18, 4, 3);
+  // Head
+  ctx.fillStyle = '#6a1b9a'; ctx.beginPath(); ctx.arc(cx, by - 5, 5.5, 0, Math.PI * 2); ctx.fill();
+  // Ears
+  ctx.beginPath(); ctx.moveTo(cx - 5, by - 6); ctx.lineTo(cx - 12, by - 10); ctx.lineTo(cx - 5, by - 3); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx + 5, by - 6); ctx.lineTo(cx + 12, by - 10); ctx.lineTo(cx + 5, by - 3); ctx.closePath(); ctx.fill();
+  // Hair
+  ctx.fillStyle = '#e0e0e0';
+  ctx.beginPath(); ctx.moveTo(cx - 4, by - 10); ctx.quadraticCurveTo(cx, by - 14, cx + 4, by - 10);
+  ctx.lineTo(cx + 5, by - 6); ctx.lineTo(cx + 6, by + 2); ctx.quadraticCurveTo(cx + 8, by + 6, cx + 10, by + 8);
+  ctx.lineTo(cx + 8, by + 6); ctx.quadraticCurveTo(cx + 5, by + 2, cx + 4, by - 4);
+  ctx.lineTo(cx - 4, by - 4); ctx.quadraticCurveTo(cx - 5, by + 2, cx - 6, by + 4);
+  ctx.lineTo(cx - 7, by + 6); ctx.quadraticCurveTo(cx - 6, by + 2, cx - 5, by - 6);
+  ctx.closePath(); ctx.fill();
+  // Eyes
+  ctx.globalAlpha = 0.5; ctx.fillStyle = '#d500f9';
+  ctx.beginPath(); ctx.arc(cx - 2.5, by - 5, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 2.5, by - 5, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1.0;
+  ctx.fillStyle = '#e040fb';
+  ctx.beginPath(); ctx.arc(cx - 2.5, by - 5, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 2.5, by - 5, 1.5, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawMythicalBasilisk(cx, by, def) {
+  // Back coil
+  ctx.fillStyle = '#4e6b4e';
+  ctx.beginPath(); ctx.ellipse(cx + 4, by + 14, 10, 5, 0.2, 0, Math.PI * 2); ctx.fill();
+  // Tail
+  ctx.strokeStyle = '#4e6b4e'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(cx + 12, by + 14); ctx.quadraticCurveTo(cx + 22, by + 12, cx + 18, by + 20); ctx.stroke();
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(cx + 18, by + 20); ctx.quadraticCurveTo(cx + 16, by + 24, cx + 20, by + 24); ctx.stroke();
+  // Front coil
+  ctx.fillStyle = def.color;
+  ctx.beginPath(); ctx.ellipse(cx - 2, by + 10, 8, 6, -0.1, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#8fad8f';
+  ctx.beginPath(); ctx.ellipse(cx - 2, by + 12, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
+  // Armored scales
+  ctx.fillStyle = '#546e50';
+  ctx.beginPath(); ctx.moveTo(cx - 8, by + 6); ctx.lineTo(cx - 6, by + 4); ctx.lineTo(cx - 3, by + 6); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx - 4, by + 5); ctx.lineTo(cx - 2, by + 3); ctx.lineTo(cx + 1, by + 5); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx, by + 5); ctx.lineTo(cx + 2, by + 3); ctx.lineTo(cx + 5, by + 5); ctx.closePath(); ctx.fill();
+  // Neck
+  ctx.fillStyle = '#4e6b4e';
+  ctx.beginPath(); ctx.moveTo(cx - 5, by + 6); ctx.quadraticCurveTo(cx - 8, by - 2, cx - 3, by - 8);
+  ctx.lineTo(cx + 3, by - 8); ctx.quadraticCurveTo(cx + 6, by - 2, cx + 3, by + 6); ctx.closePath(); ctx.fill();
+  // Head
+  ctx.beginPath(); ctx.ellipse(cx, by - 12, 7, 5, 0, 0, Math.PI * 2); ctx.fill();
+  // Crown crest
+  ctx.fillStyle = '#ffd600';
+  ctx.beginPath();
+  ctx.moveTo(cx - 5, by - 16); ctx.lineTo(cx - 4, by - 22); ctx.lineTo(cx - 2, by - 17);
+  ctx.lineTo(cx, by - 24); ctx.lineTo(cx + 2, by - 17);
+  ctx.lineTo(cx + 4, by - 22); ctx.lineTo(cx + 5, by - 16);
+  ctx.closePath(); ctx.fill();
+  // Glowing eyes
+  ctx.globalAlpha = 0.4; ctx.fillStyle = '#ffff00';
+  ctx.beginPath(); ctx.arc(cx - 3, by - 12, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 3, by - 12, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1.0;
+  ctx.fillStyle = '#fdd835';
+  ctx.beginPath(); ctx.arc(cx - 3, by - 12, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 3, by - 12, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.fillRect(cx - 3.5, by - 13.5, 1, 3); ctx.fillRect(cx + 2.5, by - 13.5, 1, 3);
+  // Forked tongue
+  ctx.strokeStyle = '#e53935'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx, by - 15); ctx.lineTo(cx, by - 19); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, by - 19); ctx.lineTo(cx - 2, by - 21); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, by - 19); ctx.lineTo(cx + 2, by - 21); ctx.stroke();
+}
+
+function drawMythicalWyvern(cx, by, def) {
+  // Tail
+  ctx.strokeStyle = '#1565c0'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(cx - 3, by + 14); ctx.quadraticCurveTo(cx - 18, by + 18, cx - 22, by + 8); ctx.stroke();
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx - 22, by + 8); ctx.quadraticCurveTo(cx - 26, by + 2, cx - 24, by - 2); ctx.stroke();
+  ctx.fillStyle = '#0d47a1';
+  ctx.beginPath(); ctx.moveTo(cx - 24, by - 2); ctx.lineTo(cx - 28, by - 6); ctx.lineTo(cx - 22, by - 4); ctx.lineTo(cx - 26, by - 1); ctx.closePath(); ctx.fill();
+  // Wings
+  ctx.fillStyle = def.color; ctx.globalAlpha = 0.8;
+  ctx.beginPath(); ctx.moveTo(cx - 5, by + 2); ctx.lineTo(cx - 28, by - 16); ctx.lineTo(cx - 22, by - 6);
+  ctx.lineTo(cx - 30, by - 2); ctx.lineTo(cx - 18, by + 2); ctx.lineTo(cx - 24, by + 6); ctx.lineTo(cx - 12, by + 6); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx + 5, by + 2); ctx.lineTo(cx + 28, by - 16); ctx.lineTo(cx + 22, by - 6);
+  ctx.lineTo(cx + 30, by - 2); ctx.lineTo(cx + 18, by + 2); ctx.lineTo(cx + 24, by + 6); ctx.lineTo(cx + 12, by + 6); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1.0;
+  // Body
+  ctx.fillStyle = '#1976d2'; ctx.beginPath(); ctx.ellipse(cx, by + 6, 8, 7, 0.1, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#90caf9'; ctx.beginPath(); ctx.ellipse(cx, by + 8, 5, 4, 0, 0, Math.PI * 2); ctx.fill();
+  // Legs
+  ctx.fillStyle = '#1565c0';
+  ctx.fillRect(cx - 5, by + 12, 3, 5); ctx.fillRect(cx + 2, by + 12, 3, 5);
+  ctx.fillStyle = '#263238';
+  ctx.beginPath(); ctx.moveTo(cx - 7, by + 17); ctx.lineTo(cx - 9, by + 19); ctx.lineTo(cx - 6, by + 17); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx + 5, by + 17); ctx.lineTo(cx + 8, by + 19); ctx.lineTo(cx + 6, by + 17); ctx.fill();
+  // Neck
+  ctx.fillStyle = '#1976d2';
+  ctx.beginPath(); ctx.moveTo(cx - 3, by + 2); ctx.quadraticCurveTo(cx - 1, by - 6, cx + 2, by - 10);
+  ctx.lineTo(cx + 5, by - 9); ctx.quadraticCurveTo(cx + 3, by - 4, cx + 4, by + 2); ctx.closePath(); ctx.fill();
+  // Head
+  ctx.beginPath(); ctx.ellipse(cx + 2, by - 13, 5, 4, 0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#1565c0';
+  ctx.beginPath(); ctx.moveTo(cx + 5, by - 15); ctx.lineTo(cx + 12, by - 16); ctx.lineTo(cx + 12, by - 12); ctx.lineTo(cx + 5, by - 11); ctx.closePath(); ctx.fill();
+  // Fangs
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.moveTo(cx + 9, by - 12); ctx.lineTo(cx + 9.5, by - 10); ctx.lineTo(cx + 8, by - 12); ctx.fill();
+  // Eye
+  ctx.fillStyle = '#ff6f00'; ctx.beginPath(); ctx.arc(cx + 2, by - 14, 1.8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.fillRect(cx + 1.5, by - 14.8, 1, 1.5);
+  // Horns
+  ctx.fillStyle = '#0d47a1';
+  ctx.beginPath(); ctx.moveTo(cx - 1, by - 16); ctx.lineTo(cx - 3, by - 20); ctx.lineTo(cx + 1, by - 16); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx + 2, by - 16); ctx.lineTo(cx + 1, by - 21); ctx.lineTo(cx + 4, by - 16); ctx.closePath(); ctx.fill();
+}
+
+function drawMythicalLich(cx, by, def) {
+  // Tattered robes
+  ctx.fillStyle = '#1a0a2e';
+  ctx.beginPath(); ctx.moveTo(cx - 6, by + 2); ctx.lineTo(cx - 12, by + 22); ctx.lineTo(cx - 14, by + 24);
+  ctx.lineTo(cx + 14, by + 24); ctx.lineTo(cx + 12, by + 22); ctx.lineTo(cx + 6, by + 2); ctx.closePath(); ctx.fill();
+  // Robe folds
+  ctx.strokeStyle = '#0d0520'; ctx.lineWidth = 0.7;
+  ctx.beginPath(); ctx.moveTo(cx - 2, by + 4); ctx.lineTo(cx - 6, by + 24); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx + 2, by + 4); ctx.lineTo(cx + 6, by + 24); ctx.stroke();
+  // Tattered edges
+  ctx.fillStyle = '#1a0a2e';
+  ctx.beginPath(); ctx.moveTo(cx - 14, by + 24); ctx.lineTo(cx - 15, by + 26); ctx.lineTo(cx - 12, by + 24); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx - 10, by + 24); ctx.lineTo(cx - 11, by + 27); ctx.lineTo(cx - 8, by + 24); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx + 8, by + 24); ctx.lineTo(cx + 9, by + 26); ctx.lineTo(cx + 11, by + 24); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx + 12, by + 24); ctx.lineTo(cx + 14, by + 26); ctx.lineTo(cx + 14, by + 24); ctx.fill();
+  // Trim
+  ctx.fillStyle = def.color; ctx.globalAlpha = 0.6;
+  ctx.fillRect(cx - 6, by + 2, 12, 1); ctx.fillRect(cx - 8, by + 8, 16, 1);
+  ctx.globalAlpha = 1.0;
+  // High collar
+  ctx.fillStyle = '#2d1050';
+  ctx.beginPath(); ctx.moveTo(cx - 6, by + 2); ctx.lineTo(cx - 8, by - 4); ctx.lineTo(cx - 4, by);
+  ctx.lineTo(cx + 4, by); ctx.lineTo(cx + 8, by - 4); ctx.lineTo(cx + 6, by + 2); ctx.closePath(); ctx.fill();
+  // Skeletal arms
+  ctx.fillStyle = '#d7ccc8'; ctx.fillRect(cx - 10, by + 4, 2, 6); ctx.fillRect(cx + 8, by + 4, 2, 6);
+  ctx.fillStyle = '#bcaaa4'; ctx.fillRect(cx - 13, by + 11, 4, 2); ctx.fillRect(cx + 9, by + 3, 3, 2);
+  // Dark orb
+  ctx.globalAlpha = 0.7; ctx.fillStyle = '#4a148c';
+  ctx.beginPath(); ctx.arc(cx - 12, by + 8, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.5; ctx.fillStyle = '#7c4dff';
+  ctx.beginPath(); ctx.arc(cx - 12, by + 7, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.25; ctx.fillStyle = '#9c27b0';
+  ctx.beginPath(); ctx.arc(cx - 12, by + 8, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1.0;
+  // Skull
+  ctx.fillStyle = '#efebe9'; ctx.beginPath(); ctx.arc(cx, by - 6, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#d7ccc8'; ctx.fillRect(cx - 4, by - 3, 8, 3);
+  // Teeth
+  ctx.fillStyle = '#efebe9';
+  ctx.fillRect(cx - 3, by - 1, 1.2, 1.5); ctx.fillRect(cx - 1.2, by - 1, 1.2, 1.5);
+  ctx.fillRect(cx + 0.5, by - 1, 1.2, 1.5); ctx.fillRect(cx + 2, by - 1, 1.2, 1.5);
+  // Eye sockets
+  ctx.fillStyle = '#111';
+  ctx.beginPath(); ctx.ellipse(cx - 2.5, by - 7, 2.2, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx + 2.5, by - 7, 2.2, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+  // Glowing eyes
+  ctx.globalAlpha = 0.8; ctx.fillStyle = '#76ff03';
+  ctx.beginPath(); ctx.arc(cx - 2.5, by - 7, 1.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 2.5, by - 7, 1.2, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.3;
+  ctx.beginPath(); ctx.arc(cx - 2.5, by - 7, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 2.5, by - 7, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1.0;
+  // Crown
+  ctx.fillStyle = '#4a148c'; ctx.fillRect(cx - 5, by - 12, 10, 2);
+  ctx.fillStyle = '#6a1b9a';
+  ctx.beginPath(); ctx.moveTo(cx - 5, by - 12); ctx.lineTo(cx - 4, by - 16); ctx.lineTo(cx - 2, by - 12); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx - 1, by - 12); ctx.lineTo(cx, by - 17); ctx.lineTo(cx + 1, by - 12); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx + 2, by - 12); ctx.lineTo(cx + 4, by - 16); ctx.lineTo(cx + 5, by - 12); ctx.fill();
+  ctx.fillStyle = '#00e676'; ctx.beginPath(); ctx.arc(cx, by - 13, 1.2, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawMythicalOgre(cx, by, def) {
+  // Club behind
+  ctx.fillStyle = '#5d4037';
+  ctx.beginPath(); ctx.moveTo(cx + 14, by - 4); ctx.lineTo(cx + 16, by - 4); ctx.lineTo(cx + 18, by + 20); ctx.lineTo(cx + 14, by + 20); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#4e342e'; ctx.beginPath(); ctx.ellipse(cx + 16, by + 22, 5, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#9e9e9e';
+  ctx.beginPath(); ctx.arc(cx + 13, by + 21, 1, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 19, by + 22, 1, 0, Math.PI * 2); ctx.fill();
+  // Massive body
+  ctx.fillStyle = '#9e9d24'; ctx.beginPath(); ctx.ellipse(cx, by + 8, 14, 12, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#c0ca33'; ctx.beginPath(); ctx.ellipse(cx, by + 12, 10, 7, 0, 0, Math.PI); ctx.fill();
+  // Loincloth
+  ctx.fillStyle = '#6d4c41'; ctx.fillRect(cx - 8, by + 18, 16, 5);
+  // Shoulder hunch
+  ctx.fillStyle = '#9e9d24'; ctx.beginPath(); ctx.ellipse(cx - 2, by + 2, 12, 6, -0.3, 0, Math.PI * 2); ctx.fill();
+  // Arms
+  ctx.fillStyle = '#827717'; ctx.fillRect(cx - 16, by + 2, 5, 12); ctx.fillRect(cx + 11, by + 2, 5, 10);
+  ctx.fillStyle = '#9e9d24'; ctx.fillRect(cx - 16, by + 12, 6, 5); ctx.fillRect(cx + 10, by + 10, 6, 4);
+  // Fists
+  ctx.fillStyle = '#827717';
+  ctx.beginPath(); ctx.arc(cx - 13, by + 18, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 14, by + 0, 3, 0, Math.PI * 2); ctx.fill();
+  // Legs
+  ctx.fillStyle = '#827717'; ctx.fillRect(cx - 7, by + 23, 6, 8); ctx.fillRect(cx + 1, by + 23, 6, 8);
+  ctx.fillStyle = '#6d6411'; ctx.fillRect(cx - 9, by + 29, 9, 3); ctx.fillRect(cx + 0, by + 29, 9, 3);
+  // Small head
+  ctx.fillStyle = '#9e9d24'; ctx.beginPath(); ctx.arc(cx, by - 5, 4.5, 0, Math.PI * 2); ctx.fill();
+  // Brow ridge
+  ctx.fillStyle = '#827717'; ctx.fillRect(cx - 5, by - 8, 10, 2.5);
+  // Eyes
+  ctx.fillStyle = '#f44336'; ctx.fillRect(cx - 3, by - 6, 2, 1.5); ctx.fillRect(cx + 1, by - 6, 2, 1.5);
+  ctx.fillStyle = '#111'; ctx.fillRect(cx - 2.5, by - 5.8, 1, 1); ctx.fillRect(cx + 1.5, by - 5.8, 1, 1);
+  // Underbite with fangs
+  ctx.fillStyle = '#8a8520'; ctx.fillRect(cx - 5, by - 2, 10, 3);
+  ctx.fillStyle = '#f5f5dc';
+  ctx.beginPath(); ctx.moveTo(cx - 4, by); ctx.lineTo(cx - 3.5, by - 3); ctx.lineTo(cx - 3, by); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx + 3, by); ctx.lineTo(cx + 3.5, by - 3); ctx.lineTo(cx + 4, by); ctx.closePath(); ctx.fill();
+  // Warts
+  ctx.fillStyle = '#6d6411';
+  ctx.beginPath(); ctx.arc(cx - 8, by + 4, 1, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 6, by + 6, 1.2, 0, Math.PI * 2); ctx.fill();
+}
 
 // --- BANDIT (replaces militant) ---
 function drawBandit(cx, by, def) {
@@ -5372,7 +6216,17 @@ function drawEnemy(e, sx, sy) {
 
   const by = cy - 10 + bob;
 
-  if (modernMode) {
+  if (mythicalMode) {
+    switch (e.type) {
+      case 'bandit': drawMythicalImp(cx, by, def); break;
+      case 'raider': drawMythicalOrcBerserker(cx, by, def); break;
+      case 'enemy_archer': drawMythicalDarkElfArcher(cx, by, def); break;
+      case 'war_elephant': drawMythicalBasilisk(cx, by, def); break;
+      case 'dragon_rider': drawMythicalWyvern(cx, by, def); break;
+      case 'dark_mage': drawMythicalLich(cx, by, def); break;
+      case 'troll': drawMythicalOgre(cx, by, def); break;
+    }
+  } else if (modernMode) {
     switch (e.type) {
       case 'bandit': drawModernInsurgent(cx, by, def); break;
       case 'raider': drawModernGuerrilla(cx, by, def); break;
@@ -7557,6 +8411,361 @@ function drawBattle() {
   ctx.restore();
 }
 
+function drawMythicalBattleSprite(unit, sx, sy, cy, isPlayer, color, dark, enemyDef) {
+  const t = unit.type;
+  switch (t) {
+    case 'militia': {
+      ctx.fillStyle = dark; ctx.fillRect(sx - 3, cy + 2, 2.5, 5); ctx.fillRect(sx + 0.5, cy + 2, 2.5, 5);
+      ctx.fillStyle = color; ctx.fillRect(sx - 5, cy - 3, 10, 7);
+      ctx.fillStyle = dark; ctx.fillRect(sx - 7, cy - 1, 3, 5); ctx.fillRect(sx + 4, cy - 1, 3, 5);
+      ctx.fillStyle = '#5a8a2a'; ctx.beginPath(); ctx.arc(sx, cy - 7, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#5a8a2a';
+      ctx.beginPath(); ctx.moveTo(sx - 4, cy - 8); ctx.lineTo(sx - 9, cy - 12); ctx.lineTo(sx - 3, cy - 5); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(sx + 4, cy - 8); ctx.lineTo(sx + 9, cy - 12); ctx.lineTo(sx + 3, cy - 5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(sx - 1.5, cy - 7.5, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + 1.5, cy - 7.5, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#aaa'; ctx.fillRect(sx + 5, cy - 2, 6, 1.5);
+      ctx.fillStyle = '#5d4037'; ctx.fillRect(sx + 4, cy - 2.5, 2, 2.5);
+      break;
+    }
+    case 'longbowmen': {
+      ctx.fillStyle = dark; ctx.fillRect(sx - 2, cy + 2, 2, 6); ctx.fillRect(sx + 0.5, cy + 2, 2, 6);
+      ctx.fillStyle = color; ctx.fillRect(sx - 4, cy - 4, 8, 8);
+      ctx.fillStyle = dark; ctx.fillRect(sx - 6, cy - 2, 3, 6); ctx.fillRect(sx + 3, cy - 2, 3, 6);
+      ctx.fillStyle = '#f5deb3'; ctx.beginPath(); ctx.arc(sx, cy - 8, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f5deb3';
+      ctx.beginPath(); ctx.moveTo(sx - 3.5, cy - 9); ctx.lineTo(sx - 7, cy - 13); ctx.lineTo(sx - 2, cy - 7); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(sx + 3.5, cy - 9); ctx.lineTo(sx + 7, cy - 13); ctx.lineTo(sx + 2, cy - 7); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffd54f'; ctx.beginPath(); ctx.arc(sx, cy - 10, 3.5, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = '#4fc3f7'; ctx.fillRect(sx - 2, cy - 9, 1.5, 1); ctx.fillRect(sx + 0.5, cy - 9, 1.5, 1);
+      ctx.strokeStyle = '#8d6e63'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(sx + 8, cy - 3, 8, -Math.PI * 0.4, Math.PI * 0.4); ctx.stroke();
+      ctx.strokeStyle = '#ddd'; ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(sx + 8 + 8 * Math.cos(-Math.PI * 0.4), cy - 3 + 8 * Math.sin(-Math.PI * 0.4)); ctx.lineTo(sx + 8 + 8 * Math.cos(Math.PI * 0.4), cy - 3 + 8 * Math.sin(Math.PI * 0.4)); ctx.stroke();
+      break;
+    }
+    case 'crossbowmen': {
+      ctx.fillStyle = dark; ctx.fillRect(sx - 3, cy + 2, 3, 4); ctx.fillRect(sx + 0.5, cy + 2, 3, 4);
+      ctx.fillStyle = color; ctx.fillRect(sx - 6, cy - 3, 12, 7);
+      ctx.fillStyle = dark; ctx.fillRect(sx - 9, cy - 1, 4, 6); ctx.fillRect(sx + 5, cy - 1, 4, 6);
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(sx, cy - 7, 4.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#777'; ctx.beginPath(); ctx.arc(sx, cy - 9, 4.5, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = '#8d6e63';
+      ctx.beginPath(); ctx.moveTo(sx - 3, cy - 4); ctx.lineTo(sx + 3, cy - 4); ctx.lineTo(sx + 2, cy + 1); ctx.lineTo(sx, cy + 2); ctx.lineTo(sx - 2, cy + 1); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.fillRect(sx - 2, cy - 8, 1.5, 1.5); ctx.fillRect(sx + 1, cy - 8, 1.5, 1.5);
+      ctx.fillStyle = '#555'; ctx.fillRect(sx + 7, cy - 2, 8, 2.5);
+      ctx.fillStyle = '#4fc3f7'; ctx.fillRect(sx + 9, cy - 1.5, 1, 1.5); ctx.fillRect(sx + 12, cy - 1.5, 1, 1.5);
+      break;
+    }
+    case 'menatarms': {
+      ctx.fillStyle = dark; ctx.fillRect(sx - 4, cy + 2, 3.5, 6); ctx.fillRect(sx + 0.5, cy + 2, 3.5, 6);
+      ctx.fillStyle = color; ctx.fillRect(sx - 6, cy - 5, 12, 9);
+      ctx.fillStyle = dark; ctx.fillRect(sx - 9, cy - 3, 4, 8); ctx.fillRect(sx + 5, cy - 3, 4, 8);
+      ctx.fillStyle = '#6d4c41'; ctx.beginPath(); ctx.arc(sx, cy - 9, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#8d6e63'; ctx.beginPath(); ctx.ellipse(sx, cy - 6, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff9c4';
+      ctx.beginPath(); ctx.moveTo(sx - 5, cy - 11); ctx.lineTo(sx - 10, cy - 16); ctx.lineTo(sx - 3, cy - 9); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(sx + 5, cy - 11); ctx.lineTo(sx + 10, cy - 16); ctx.lineTo(sx + 3, cy - 9); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#f44336'; ctx.beginPath(); ctx.arc(sx - 2, cy - 10, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + 2, cy - 10, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#5d4037'; ctx.fillRect(sx + 7, cy - 12, 2, 16);
+      ctx.fillStyle = '#999'; ctx.beginPath(); ctx.moveTo(sx + 9, cy - 12); ctx.lineTo(sx + 15, cy - 9); ctx.lineTo(sx + 9, cy - 6); ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'pikemen': {
+      ctx.fillStyle = '#8d6e63'; ctx.fillRect(sx - 8, cy + 3, 2, 5); ctx.fillRect(sx - 4, cy + 3, 2, 5);
+      ctx.fillRect(sx + 3, cy + 3, 2, 5); ctx.fillRect(sx + 7, cy + 3, 2, 5);
+      ctx.fillStyle = '#a1887f'; ctx.beginPath(); ctx.ellipse(sx, cy + 1, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#6d4c41'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sx - 10, cy + 1); ctx.lineTo(sx - 14, cy + 5); ctx.stroke();
+      ctx.fillStyle = color; ctx.fillRect(sx + 4, cy - 8, 8, 8);
+      ctx.fillStyle = dark; ctx.fillRect(sx + 2, cy - 6, 3, 5); ctx.fillRect(sx + 11, cy - 6, 3, 5);
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(sx + 8, cy - 12, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#333'; ctx.fillRect(sx + 6, cy - 13, 1.5, 1); ctx.fillRect(sx + 9, cy - 13, 1.5, 1);
+      ctx.fillStyle = '#5d4037'; ctx.fillRect(sx + 12, cy - 18, 1.5, 22);
+      ctx.fillStyle = '#bbb'; ctx.beginPath(); ctx.moveTo(sx + 12, cy - 18); ctx.lineTo(sx + 14, cy - 18); ctx.lineTo(sx + 13, cy - 22); ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'knights': {
+      ctx.fillStyle = '#c69c4e'; ctx.beginPath(); ctx.ellipse(sx, cy + 1, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#a67c3e'; ctx.fillRect(sx - 8, cy + 4, 3, 4); ctx.fillRect(sx - 3, cy + 4, 3, 4);
+      ctx.fillRect(sx + 2, cy + 4, 3, 4); ctx.fillRect(sx + 6, cy + 4, 3, 4);
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx + 10, cy - 2, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff8f00'; ctx.beginPath(); ctx.moveTo(sx + 13, cy - 2); ctx.lineTo(sx + 17, cy - 1); ctx.lineTo(sx + 13, cy); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(sx + 11, cy - 3, 0.8, 0, Math.PI * 2); ctx.fill();
+      const gWing = Math.sin(animFrame * 0.15) * 0.3;
+      ctx.fillStyle = 'rgba(160,120,60,0.7)';
+      ctx.beginPath(); ctx.moveTo(sx - 2, cy - 3); ctx.lineTo(sx - 14, cy - 14 + gWing * 10); ctx.lineTo(sx - 6, cy - 1); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(sx + 4, cy - 3); ctx.lineTo(sx + 16, cy - 14 + gWing * 10); ctx.lineTo(sx + 10, cy - 1); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = color; ctx.fillRect(sx - 2, cy - 8, 6, 5);
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(sx + 1, cy - 12, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(sx + 1, cy - 14, 3, Math.PI, 0); ctx.fill();
+      break;
+    }
+    case 'catapults': {
+      ctx.fillStyle = dark; ctx.fillRect(sx - 5, cy + 2, 4, 6); ctx.fillRect(sx + 1, cy + 2, 4, 6);
+      ctx.fillStyle = color; ctx.fillRect(sx - 7, cy - 6, 14, 10);
+      ctx.fillStyle = dark; ctx.fillRect(sx - 10, cy - 4, 4, 8); ctx.fillRect(sx + 6, cy - 4, 4, 8);
+      ctx.fillStyle = '#b39ddb'; ctx.beginPath(); ctx.arc(sx, cy - 10, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx, cy - 10, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f44336'; ctx.beginPath(); ctx.arc(sx, cy - 10, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(sx, cy - 10, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#888'; ctx.beginPath(); ctx.arc(sx + 10, cy - 5, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#666'; ctx.beginPath(); ctx.arc(sx + 11, cy - 6, 1.5, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'healers': {
+      ctx.fillStyle = '#ccc'; ctx.fillRect(sx - 8, cy + 3, 2, 5); ctx.fillRect(sx - 4, cy + 3, 2, 5);
+      ctx.fillRect(sx + 3, cy + 3, 2, 5); ctx.fillRect(sx + 7, cy + 3, 2, 5);
+      ctx.fillStyle = '#f5f5f5'; ctx.beginPath(); ctx.ellipse(sx, cy + 1, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#e1bee7'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sx - 10, cy); ctx.lineTo(sx - 15, cy + 4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx - 10, cy + 1); ctx.lineTo(sx - 14, cy + 6); ctx.stroke();
+      ctx.fillStyle = '#f5f5f5'; ctx.fillRect(sx + 8, cy - 8, 4, 8);
+      ctx.beginPath(); ctx.arc(sx + 10, cy - 10, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#7c4dff'; ctx.beginPath(); ctx.arc(sx + 12, cy - 11, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e1bee7'; ctx.fillRect(sx + 7, cy - 10, 2, 8);
+      ctx.fillStyle = '#ffd54f';
+      ctx.beginPath(); ctx.moveTo(sx + 9, cy - 14); ctx.lineTo(sx + 11, cy - 14); ctx.lineTo(sx + 10, cy - 20); ctx.closePath(); ctx.fill();
+      const hornGlow = 0.3 + Math.sin(animFrame * 0.12) * 0.2;
+      ctx.fillStyle = 'rgba(255,213,79,' + hornGlow + ')';
+      ctx.beginPath(); ctx.arc(sx + 10, cy - 18, 4, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'firelancers': {
+      ctx.fillStyle = '#ff5722'; ctx.beginPath(); ctx.ellipse(sx, cy, 5, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff9800'; ctx.beginPath(); ctx.ellipse(sx, cy, 3, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff5722'; ctx.beginPath(); ctx.arc(sx + 6, cy - 4, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffeb3b'; ctx.beginPath(); ctx.arc(sx + 6, cy - 4, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff8f00'; ctx.beginPath(); ctx.moveTo(sx + 9, cy - 4); ctx.lineTo(sx + 13, cy - 3); ctx.lineTo(sx + 9, cy - 2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(sx + 7, cy - 5, 0.8, 0, Math.PI * 2); ctx.fill();
+      const fWing = Math.sin(animFrame * 0.2) * 0.3;
+      ctx.fillStyle = '#ff5722';
+      ctx.beginPath(); ctx.moveTo(sx - 2, cy - 2); ctx.lineTo(sx - 16, cy - 14 + fWing * 8); ctx.lineTo(sx - 6, cy + 1); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(sx + 2, cy - 2); ctx.lineTo(sx + 16, cy - 14 + fWing * 8); ctx.lineTo(sx + 6, cy + 1); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffeb3b';
+      ctx.beginPath(); ctx.moveTo(sx - 1, cy - 1); ctx.lineTo(sx - 12, cy - 10 + fWing * 6); ctx.lineTo(sx - 5, cy + 1); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(sx + 1, cy - 1); ctx.lineTo(sx + 12, cy - 10 + fWing * 6); ctx.lineTo(sx + 5, cy + 1); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ff9800';
+      ctx.beginPath(); ctx.moveTo(sx - 5, cy + 1); ctx.lineTo(sx - 12, cy + 6); ctx.lineTo(sx - 4, cy + 3); ctx.closePath(); ctx.fill();
+      const fGlow = 0.2 + Math.sin(animFrame * 0.15) * 0.15;
+      ctx.fillStyle = 'rgba(255,152,0,' + fGlow + ')';
+      ctx.beginPath(); ctx.arc(sx, cy - 2, 10, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'assassins': {
+      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = '#37474f';
+      ctx.beginPath(); ctx.moveTo(sx - 6, cy - 4); ctx.lineTo(sx + 6, cy - 4);
+      ctx.lineTo(sx + 8, cy + 6); ctx.lineTo(sx + 4, cy + 8);
+      ctx.lineTo(sx, cy + 6); ctx.lineTo(sx - 4, cy + 8); ctx.lineTo(sx - 8, cy + 6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#455a64'; ctx.fillRect(sx - 10, cy - 2, 5, 2); ctx.fillRect(sx + 5, cy - 2, 5, 2);
+      ctx.fillStyle = '#263238';
+      ctx.beginPath(); ctx.arc(sx, cy - 7, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(sx - 5, cy - 7, 10, 5);
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(sx, cy - 7, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#00e5ff';
+      ctx.beginPath(); ctx.arc(sx - 1.5, cy - 7.5, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + 1.5, cy - 7.5, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(0,229,255,0.5)'; ctx.fillRect(sx + 8, cy - 4, 7, 1.5);
+      ctx.fillStyle = 'rgba(0,229,255,0.8)';
+      ctx.beginPath(); ctx.moveTo(sx + 15, cy - 4); ctx.lineTo(sx + 17, cy - 3); ctx.lineTo(sx + 15, cy - 2); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1.0;
+      break;
+    }
+    case 'cannons': {
+      ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(sx, cy + 2, 8, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = dark; ctx.beginPath(); ctx.ellipse(sx, cy + 3, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(sx - 8, cy + 2); ctx.lineTo(sx - 14, cy + 5); ctx.stroke();
+      ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(sx - 14, cy + 5); ctx.lineTo(sx - 17, cy + 3); ctx.stroke();
+      ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(sx + 4, cy - 1); ctx.lineTo(sx + 10, cy - 10); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx + 2, cy - 2); ctx.lineTo(sx, cy - 12); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx + 6, cy - 1); ctx.lineTo(sx + 14, cy - 6); ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(sx + 10, cy - 12, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx, cy - 14, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + 15, cy - 7, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff0';
+      ctx.beginPath(); ctx.arc(sx + 11, cy - 13, 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + 1, cy - 15, 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + 16, cy - 8, 0.7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f44336';
+      ctx.beginPath(); ctx.arc(sx + 12, cy - 11, 1.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + 2, cy - 13, 1.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + 17, cy - 6, 1, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'dragonriders': {
+      ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(sx, cy + 1, 12, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = dark; ctx.beginPath(); ctx.ellipse(sx, cy + 2, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = color; ctx.fillRect(sx - 8, cy + 5, 3, 4); ctx.fillRect(sx - 3, cy + 5, 3, 4);
+      ctx.fillRect(sx + 2, cy + 5, 3, 4); ctx.fillRect(sx + 6, cy + 5, 3, 4);
+      ctx.strokeStyle = color; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(sx - 12, cy + 1); ctx.lineTo(sx - 18, cy + 4); ctx.stroke();
+      ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(sx - 18, cy + 4); ctx.lineTo(sx - 20, cy + 1); ctx.stroke();
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.moveTo(sx - 20, cy + 1); ctx.lineTo(sx - 21, cy - 1); ctx.lineTo(sx - 18, cy + 2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = color; ctx.beginPath(); ctx.arc(sx + 12, cy - 3, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff9c4';
+      ctx.beginPath(); ctx.moveTo(sx + 10, cy - 6); ctx.lineTo(sx + 8, cy - 12); ctx.lineTo(sx + 12, cy - 5); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(sx + 14, cy - 6); ctx.lineTo(sx + 16, cy - 12); ctx.lineTo(sx + 13, cy - 5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(sx + 13, cy - 4, 1.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(sx + 13, cy - 4, 0.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = dark; ctx.beginPath(); ctx.moveTo(sx + 15, cy - 2); ctx.lineTo(sx + 19, cy - 1); ctx.lineTo(sx + 15, cy); ctx.closePath(); ctx.fill();
+      const dWing = Math.sin(animFrame * 0.12) * 0.3;
+      ctx.fillStyle = 'rgba(100,160,100,0.6)';
+      ctx.beginPath(); ctx.moveTo(sx - 4, cy - 3); ctx.lineTo(sx - 16, cy - 16 + dWing * 10); ctx.lineTo(sx - 10, cy - 1); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(sx + 4, cy - 3); ctx.lineTo(sx + 16, cy - 16 + dWing * 10); ctx.lineTo(sx + 10, cy - 1); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffcc80'; ctx.beginPath(); ctx.ellipse(sx, cy + 2, 6, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'bandit': {
+      ctx.fillStyle = dark; ctx.fillRect(sx - 2.5, cy + 2, 2, 5); ctx.fillRect(sx + 0.5, cy + 2, 2, 5);
+      ctx.fillStyle = color; ctx.fillRect(sx - 4, cy - 3, 8, 7);
+      ctx.fillStyle = dark; ctx.fillRect(sx - 6, cy - 1, 3, 4); ctx.fillRect(sx + 3, cy - 1, 3, 4);
+      ctx.fillStyle = color; ctx.beginPath(); ctx.arc(sx, cy - 7, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#333';
+      ctx.beginPath(); ctx.moveTo(sx - 3, cy - 9); ctx.lineTo(sx - 5, cy - 13); ctx.lineTo(sx - 1, cy - 8); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(sx + 3, cy - 9); ctx.lineTo(sx + 5, cy - 13); ctx.lineTo(sx + 1, cy - 8); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(sx - 1.5, cy - 7.5, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + 1.5, cy - 7.5, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#111'; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.arc(sx, cy - 5.5, 2, 0, Math.PI); ctx.stroke();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(sx - 3, cy + 4); ctx.lineTo(sx - 8, cy + 2); ctx.stroke();
+      ctx.fillStyle = dark; ctx.beginPath(); ctx.moveTo(sx - 8, cy + 1); ctx.lineTo(sx - 10, cy + 3); ctx.lineTo(sx - 7, cy + 3); ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'raider': {
+      ctx.fillStyle = dark; ctx.fillRect(sx - 4, cy + 2, 3.5, 6); ctx.fillRect(sx + 0.5, cy + 2, 3.5, 6);
+      ctx.fillStyle = color; ctx.fillRect(sx - 6, cy - 5, 12, 9);
+      ctx.fillStyle = dark; ctx.fillRect(sx - 9, cy - 3, 4, 8); ctx.fillRect(sx + 5, cy - 3, 4, 8);
+      ctx.fillStyle = '#558b2f'; ctx.beginPath(); ctx.arc(sx, cy - 8, 4.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#33691e'; ctx.beginPath(); ctx.ellipse(sx, cy - 5, 3.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillRect(sx - 2.5, cy - 6, 1.5, 2.5); ctx.fillRect(sx + 1, cy - 6, 1.5, 2.5);
+      ctx.fillStyle = '#f44336'; ctx.beginPath(); ctx.arc(sx - 2, cy - 9, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + 2, cy - 9, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = dark; ctx.fillRect(sx - 4, cy - 9, 8, 1);
+      ctx.fillStyle = '#555'; ctx.fillRect(sx + 7, cy - 10, 2, 14);
+      ctx.fillStyle = '#888';
+      ctx.beginPath(); ctx.moveTo(sx + 9, cy - 10); ctx.lineTo(sx + 14, cy - 7); ctx.lineTo(sx + 9, cy - 4); ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'enemy_archer': {
+      ctx.fillStyle = dark; ctx.fillRect(sx - 2, cy + 2, 2, 6); ctx.fillRect(sx + 0.5, cy + 2, 2, 6);
+      ctx.fillStyle = color; ctx.fillRect(sx - 4, cy - 4, 8, 8);
+      ctx.fillStyle = dark; ctx.fillRect(sx - 6, cy - 2, 3, 6); ctx.fillRect(sx + 3, cy - 2, 3, 6);
+      ctx.fillStyle = '#9575cd'; ctx.beginPath(); ctx.arc(sx, cy - 8, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#9575cd';
+      ctx.beginPath(); ctx.moveTo(sx - 3.5, cy - 9); ctx.lineTo(sx - 7, cy - 13); ctx.lineTo(sx - 2, cy - 7); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(sx + 3.5, cy - 9); ctx.lineTo(sx + 7, cy - 13); ctx.lineTo(sx + 2, cy - 7); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#e0e0e0'; ctx.beginPath(); ctx.arc(sx, cy - 10, 3.5, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = '#f44336'; ctx.fillRect(sx - 2, cy - 9, 1.5, 1); ctx.fillRect(sx + 0.5, cy - 9, 1.5, 1);
+      ctx.strokeStyle = '#4a148c'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(sx + 8, cy - 3, 8, -Math.PI * 0.4, Math.PI * 0.4); ctx.stroke();
+      ctx.strokeStyle = '#b388ff'; ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(sx + 8 + 8 * Math.cos(-Math.PI * 0.4), cy - 3 + 8 * Math.sin(-Math.PI * 0.4)); ctx.lineTo(sx + 8 + 8 * Math.cos(Math.PI * 0.4), cy - 3 + 8 * Math.sin(Math.PI * 0.4)); ctx.stroke();
+      break;
+    }
+    case 'war_elephant': {
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.ellipse(sx - 2, cy + 2, 10, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.ellipse(sx - 2, cy + 3, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = dark;
+      for (let s = 0; s < 4; s++) { ctx.fillRect(sx - 6 + s * 4, cy + 1, 2, 1); }
+      ctx.strokeStyle = color; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(sx + 6, cy); ctx.lineTo(sx + 10, cy - 8); ctx.stroke();
+      ctx.fillStyle = color; ctx.beginPath(); ctx.arc(sx + 10, cy - 10, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffd54f';
+      ctx.beginPath(); ctx.moveTo(sx + 8, cy - 13); ctx.lineTo(sx + 7, cy - 17); ctx.lineTo(sx + 10, cy - 14); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(sx + 10, cy - 14); ctx.lineTo(sx + 10, cy - 18); ctx.lineTo(sx + 12, cy - 14); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(sx + 12, cy - 13); ctx.lineTo(sx + 13, cy - 17); ctx.lineTo(sx + 13, cy - 12); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffeb3b'; ctx.beginPath(); ctx.arc(sx + 11, cy - 11, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(sx + 11, cy - 11, 0.6, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#f44336'; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(sx + 13, cy - 9); ctx.lineTo(sx + 16, cy - 8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx + 13, cy - 9); ctx.lineTo(sx + 16, cy - 10); ctx.stroke();
+      const bGlow = 0.15 + Math.sin(animFrame * 0.1) * 0.1;
+      ctx.fillStyle = 'rgba(255,235,59,' + bGlow + ')';
+      ctx.beginPath(); ctx.arc(sx + 11, cy - 11, 5, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'dragon_rider': {
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.moveTo(sx - 8, cy + 1); ctx.lineTo(sx - 3, cy - 5);
+      ctx.lineTo(sx + 6, cy - 5); ctx.lineTo(sx + 8, cy + 1);
+      ctx.lineTo(sx + 5, cy + 4); ctx.lineTo(sx - 6, cy + 4); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.moveTo(sx - 6, cy + 2); ctx.lineTo(sx - 1, cy - 3);
+      ctx.lineTo(sx + 4, cy - 3); ctx.lineTo(sx + 6, cy + 2);
+      ctx.lineTo(sx + 3, cy + 3); ctx.lineTo(sx - 4, cy + 3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = color; ctx.fillRect(sx - 3, cy + 4, 2.5, 4); ctx.fillRect(sx + 2, cy + 4, 2.5, 4);
+      ctx.fillStyle = '#333'; ctx.fillRect(sx - 4, cy + 7, 4, 1.5); ctx.fillRect(sx + 1, cy + 7, 4, 1.5);
+      ctx.fillStyle = color; ctx.beginPath(); ctx.arc(sx + 8, cy - 4, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(sx + 9, cy - 5, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = dark; ctx.beginPath(); ctx.moveTo(sx + 11, cy - 3); ctx.lineTo(sx + 15, cy - 2); ctx.lineTo(sx + 11, cy - 1); ctx.closePath(); ctx.fill();
+      const wWing = Math.sin(animFrame * 0.15) * 0.3;
+      ctx.fillStyle = 'rgba(150,100,100,0.6)';
+      ctx.beginPath(); ctx.moveTo(sx - 2, cy - 4); ctx.lineTo(sx - 14, cy - 14 + wWing * 10); ctx.lineTo(sx - 8, cy - 1); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(sx + 2, cy - 4); ctx.lineTo(sx + 14, cy - 14 + wWing * 10); ctx.lineTo(sx + 8, cy - 1); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sx - 6, cy + 2); ctx.lineTo(sx - 14, cy + 6); ctx.stroke();
+      ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(sx - 14, cy + 5); ctx.lineTo(sx - 17, cy + 3); ctx.lineTo(sx - 14, cy + 7); ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'dark_mage': {
+      ctx.fillStyle = '#1a237e';
+      ctx.beginPath(); ctx.moveTo(sx - 5, cy + 3); ctx.lineTo(sx - 7, cy + 8);
+      ctx.lineTo(sx - 3, cy + 7); ctx.lineTo(sx, cy + 8); ctx.lineTo(sx + 3, cy + 7);
+      ctx.lineTo(sx + 7, cy + 8); ctx.lineTo(sx + 5, cy + 3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#283593'; ctx.fillRect(sx - 5, cy - 4, 10, 9);
+      ctx.fillStyle = '#1a237e'; ctx.fillRect(sx - 7, cy - 2, 3, 6); ctx.fillRect(sx + 4, cy - 2, 3, 6);
+      ctx.fillStyle = '#e0e0e0'; ctx.beginPath(); ctx.arc(sx, cy - 8, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1a237e';
+      ctx.beginPath(); ctx.arc(sx, cy - 9, 5, Math.PI + 0.3, -0.3); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(sx - 1.5, cy - 8.5, 1.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + 1.5, cy - 8.5, 1.2, 0, Math.PI * 2); ctx.fill();
+      const lichGlow = 0.5 + Math.sin(animFrame * 0.12) * 0.3;
+      ctx.fillStyle = 'rgba(0,255,100,' + lichGlow + ')';
+      ctx.beginPath(); ctx.arc(sx - 1.5, cy - 8.5, 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + 1.5, cy - 8.5, 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e0e0e0'; ctx.fillRect(sx - 2, cy - 6, 1, 1.5); ctx.fillRect(sx - 0.5, cy - 6, 1, 1.5); ctx.fillRect(sx + 1, cy - 6, 1, 1.5);
+      ctx.fillStyle = '#4e342e'; ctx.fillRect(sx + 6, cy - 14, 2, 22);
+      ctx.fillStyle = '#69f0ae'; ctx.beginPath(); ctx.arc(sx + 7, cy - 15, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(105,240,174,' + (lichGlow * 0.5) + ')';
+      ctx.beginPath(); ctx.arc(sx + 7, cy - 15, 5, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'troll': {
+      ctx.fillStyle = dark; ctx.fillRect(sx - 5, cy + 2, 4, 6); ctx.fillRect(sx + 1, cy + 2, 4, 6);
+      ctx.fillStyle = color; ctx.fillRect(sx - 8, cy - 6, 16, 10);
+      ctx.fillStyle = dark; ctx.fillRect(sx - 11, cy - 4, 4, 8); ctx.fillRect(sx + 7, cy - 4, 4, 8);
+      ctx.fillStyle = '#8d6e63'; ctx.beginPath(); ctx.arc(sx, cy - 9, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#795548'; ctx.fillRect(sx - 4, cy - 12, 8, 2);
+      ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(sx - 1.5, cy - 9.5, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + 1.5, cy - 9.5, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#6d4c41'; ctx.beginPath(); ctx.ellipse(sx, cy - 6, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillRect(sx - 2, cy - 7, 1.5, 2); ctx.fillRect(sx + 0.5, cy - 7, 1.5, 2);
+      ctx.fillStyle = '#5d4037'; ctx.fillRect(sx + 9, cy - 10, 3, 14);
+      ctx.fillStyle = '#4e342e';
+      ctx.beginPath(); ctx.ellipse(sx + 10.5, cy - 11, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#999'; ctx.fillRect(sx + 7, cy - 12, 1.5, 1.5); ctx.fillRect(sx + 12, cy - 12, 1.5, 1.5);
+      break;
+    }
+    default: {
+      ctx.fillStyle = dark; ctx.fillRect(sx - 3, cy + 2, 2.5, 6); ctx.fillRect(sx + 0.5, cy + 2, 2.5, 6);
+      ctx.fillStyle = color; ctx.fillRect(sx - 5, cy - 4, 10, 8);
+      ctx.fillStyle = '#dbb896'; ctx.beginPath(); ctx.arc(sx, cy - 8, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = dark; ctx.beginPath(); ctx.arc(sx, cy - 10, 4, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.fillRect(sx - 2, cy - 9, 1.5, 1.5); ctx.fillRect(sx + 1, cy - 9, 1.5, 1.5);
+      break;
+    }
+  }
+}
+
 function drawModernBattleSprite(unit, sx, sy, cy, isPlayer, color, dark, enemyDef) {
   const t = unit.type;
   const pColor = isPlayer ? '#556b2f' : (enemyDef ? enemyDef.color : '#8b0000');
@@ -7777,7 +8986,9 @@ function drawBattleUnit(unit, sx, sy, isPlayer, selected) {
   const color = isPlayer ? '#4caf50' : (enemyDef ? enemyDef.color : '#e53935');
   const dark = isPlayer ? '#2e7d32' : (enemyDef ? enemyDef.dark : '#b71c1c');
 
-  if (modernMode) {
+  if (mythicalMode) {
+    drawMythicalBattleSprite(unit, sx, sy, cy, isPlayer, color, dark, enemyDef);
+  } else if (modernMode) {
     drawModernBattleSprite(unit, sx, sy, cy, isPlayer, color, dark, enemyDef);
   } else if (unit.type === 'troll') {
     // Large green hulk with club and fangs
