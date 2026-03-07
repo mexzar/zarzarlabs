@@ -6557,10 +6557,14 @@ function enterBattle(arr, idx, isFort) {
       moveSpeed: stats.moveSpeed, attackRate: stats.attackRate, attackCD: 0,
     });
   }
+  // Cap to available grid slots (3 columns x BROWS rows)
+  if (enemyUnits.length > 3 * BROWS) enemyUnits.length = 3 * BROWS;
   // Make sure no two enemies overlap
   for (let i = 1; i < enemyUnits.length; i++) {
-    while (enemyUnits.some((u, j) => j < i && u.x === enemyUnits[i].x && u.y === enemyUnits[i].y)) {
+    let tries = 0;
+    while (tries < BROWS && enemyUnits.some((u, j) => j < i && u.x === enemyUnits[i].x && u.y === enemyUnits[i].y)) {
       enemyUnits[i].y = (enemyUnits[i].y + 1) % BROWS;
+      tries++;
     }
     enemyUnits[i].vx = enemyUnits[i].x;
     enemyUnits[i].vy = enemyUnits[i].y;
