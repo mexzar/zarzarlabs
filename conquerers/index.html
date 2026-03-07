@@ -2761,19 +2761,14 @@ function showWageWarUI() {
   if (gameMode !== 'overworld' || !player) { msg('Can only wage war from the overworld!'); return; }
   const pw = armyPower(player.army);
   if (pw < 5) { msg('Your army is too weak to wage war!'); return; }
-  if (wageWarMode) {
-    // Cancel selection mode
-    wageWarMode = false;
-    wageWarSelected = [];
-    msg('War cancelled.');
-    draw();
-    return;
-  }
-  // Enter enemy selection mode
+  // Auto-select all enemies in a 10x10 area around the player
+  const nearby = enemies.filter(en =>
+    Math.abs(en.x - player.x) <= 5 && Math.abs(en.y - player.y) <= 5
+  );
+  if (nearby.length === 0) { msg('No enemies nearby to wage war against!'); return; }
   wageWarMode = true;
-  wageWarSelected = [];
-  msg('WAGE WAR: Click enemies on the map to select them, then click START WAR!');
-  draw();
+  wageWarSelected = nearby;
+  startWageWar();
 }
 
 function startWageWar() {
@@ -3141,33 +3136,6 @@ function draw() {
   vigGrad.addColorStop(1, 'rgba(0,0,0,0.45)');
   ctx.fillStyle = vigGrad;
   ctx.fillRect(0, 0, W, panelTop);
-
-  // Wage War selection overlay
-  if (wageWarMode) {
-    // Header banner
-    ctx.fillStyle = 'rgba(100,10,10,0.85)';
-    ctx.fillRect(W / 2 - 200, 8, 400, 32);
-    ctx.strokeStyle = '#ff5252';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(W / 2 - 200, 8, 400, 32);
-    ctx.fillStyle = '#ff8a65';
-    ctx.font = 'bold 16px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('WAGE WAR — Select Enemies (' + wageWarSelected.length + ' selected)', W / 2, 30);
-
-    // Start War button (only if enemies selected)
-    if (wageWarSelected.length > 0) {
-      const bx = W / 2 - 80, by = 46, bw = 160, bh = 28;
-      ctx.fillStyle = '#b71c1c';
-      ctx.fillRect(bx, by, bw, bh);
-      ctx.strokeStyle = '#ff5252';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(bx, by, bw, bh);
-      ctx.fillStyle = '#ffcdd2';
-      ctx.font = 'bold 14px sans-serif';
-      ctx.fillText('START WAR (' + wageWarSelected.length + ')', W / 2, by + 19);
-    }
-  }
 
   // Army panel at bottom
   drawArmyPanel();
@@ -8481,12 +8449,7 @@ document.addEventListener('keydown', e => {
       case 'ArrowRight': case 'd': case 'D':
         e.preventDefault(); tryMove(1, 0); break;
       case 'Escape':
-        if (wageWarMode) {
-          wageWarMode = false;
-          wageWarSelected = [];
-          msg('War cancelled.');
-          draw();
-        } else if (buildMode) {
+        if (buildMode) {
           buildMode = false;
           buildSelected = null;
           buildGhost = null;
@@ -8531,39 +8494,10 @@ canvas.addEventListener('click', e => {
   const my = (e.clientY - rect.top) * scaleY;
 
   if (gameMode === 'overworld') {
-    // Wage War "Start War" button click
-    if (wageWarMode && wageWarSelected.length > 0) {
-      const bx = W / 2 - 80, by = 46, bw = 160, bh = 28;
-      if (mx >= bx && mx <= bx + bw && my >= by && my <= by + bh) {
-        startWageWar();
-        return;
-      }
-    }
-
     if (my >= H - PANEL_H) return;
     const grid = fromIso(mx, my);
     // No COLS/ROWS bounds check (infinite map)
     if (!grassMap[grid.y] || grassMap[grid.y][grid.x] === undefined) return;
-
-    // Wage War enemy selection mode
-    if (wageWarMode) {
-      const clickedEnemy = enemies.find(en => {
-        const dist = Math.abs(en.x - grid.x) + Math.abs(en.y - grid.y);
-        return dist <= 1;
-      });
-      if (clickedEnemy) {
-        const idx = wageWarSelected.indexOf(clickedEnemy);
-        if (idx !== -1) {
-          wageWarSelected.splice(idx, 1);
-          msg('Deselected! ' + wageWarSelected.length + ' enemies selected. Click more or START WAR.');
-        } else {
-          wageWarSelected.push(clickedEnemy);
-          msg(wageWarSelected.length + ' enemies selected! Click more or START WAR.');
-        }
-        draw();
-      }
-      return;
-    }
 
     // Build placement (stays in build mode until ESC or B or can't afford)
     if (buildMode && buildSelected) {
