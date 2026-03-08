@@ -34,6 +34,14 @@
           <div id="spotify-results" class="spotify-results" style="display:none;"></div>
           <div id="spotify-player-container">
             <iframe id="spotify-player" style="display:none;" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+            <div id="preview-player" class="preview-player" style="display:none;">
+              <img id="preview-artwork" class="preview-artwork" src="" alt="" />
+              <div class="preview-info">
+                <div id="preview-track-name" class="preview-track-name"></div>
+                <div id="preview-artist-name" class="preview-artist-name"></div>
+              </div>
+              <audio id="preview-audio" controls></audio>
+            </div>
             <div class="player-placeholder" id="spotify-placeholder">
               <span class="placeholder-icon">&#9835;</span>
               <p>Search for a song or paste a Spotify link above</p>

@@ -333,7 +333,7 @@ h3 {
 }
 
 .spotify-result-item .result-load-btn {
-  background: #1db954;
+  background: var(--accent);
   color: white;
   border: none;
   padding: 0.4rem 0.8rem;
@@ -347,7 +347,7 @@ h3 {
 }
 
 .spotify-result-item .result-load-btn:hover {
-  background: #1ed760;
+  background: var(--accent-hover);
 }
 
 .results-loading {
@@ -424,6 +424,53 @@ input[type="text"]:focus, textarea:focus {
   min-height: 152px;
   border: none;
   border-radius: var(--radius);
+}
+
+/* === Preview Player === */
+.preview-player {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+}
+
+.preview-artwork {
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.preview-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.preview-track-name {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview-artist-name {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview-player audio {
+  width: 100%;
+  max-width: 250px;
+  height: 36px;
+  flex-shrink: 0;
 }
 
 .player-placeholder {
@@ -704,6 +751,15 @@ canvas {
   .tab-btn {
     padding: 0.5rem 0.8rem;
     font-size: 0.8rem;
+  }
+
+  .preview-player {
+    flex-wrap: wrap;
+  }
+
+  .preview-player audio {
+    max-width: none;
+    width: 100%;
   }
 
   .recording-card {

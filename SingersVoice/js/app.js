@@ -37,6 +37,40 @@
   let singRecordingPromise = null;
   let singMicStream = null;
 
+  // Preview player elements
+  const previewPlayer = document.getElementById('preview-player');
+  const previewAudio = document.getElementById('preview-audio');
+  const previewArtwork = document.getElementById('preview-artwork');
+  const previewTrackName = document.getElementById('preview-track-name');
+  const previewArtistName = document.getElementById('preview-artist-name');
+
+  function loadPreviewTrack(track) {
+    if (!track.previewUrl) {
+      singStatus.textContent = 'No preview available for this track. Try another song.';
+      return;
+    }
+
+    // Hide Spotify iframe, show preview player
+    const spotifyIframe = document.getElementById('spotify-player');
+    const placeholder = document.getElementById('spotify-placeholder');
+    spotifyIframe.style.display = 'none';
+    spotifyIframe.src = '';
+    placeholder.classList.add('hidden');
+    previewPlayer.style.display = 'flex';
+
+    // Load track info
+    previewArtwork.src = track.artwork;
+    previewTrackName.textContent = track.name;
+    previewArtistName.textContent = track.artist;
+    previewAudio.src = track.previewUrl;
+
+    // Collapse search results and enable recording
+    spotifyResults.style.display = 'none';
+    singRecordBtn.disabled = false;
+    spotifyHint.textContent = `Loaded: ${track.name} — ${track.artist}`;
+    singStatus.textContent = '';
+  }
+
   // Smart input: auto-detect Spotify URL vs search query
   function handleSpotifyInput() {
     const input = spotifyInput.value.trim();
@@ -86,14 +120,18 @@
             <div class="track-name">${escapeHtml(track.name)}</div>
             <div class="track-artist">${escapeHtml(track.artist)}</div>
           </div>
-          <button class="result-load-btn">Open in Spotify</button>
+          <button class="result-load-btn">Select</button>
         `;
 
-        // Clicking "Open in Spotify" opens a pre-filled Spotify search for this exact track
+        // Clicking the result or "Select" button loads the preview into the player
+        function selectTrack() {
+          loadPreviewTrack(track);
+        }
+
+        item.addEventListener('click', selectTrack);
         item.querySelector('.result-load-btn').addEventListener('click', (e) => {
           e.stopPropagation();
-          window.open(track.spotifySearchUrl, '_blank', 'noopener,noreferrer');
-          spotifyHint.textContent = 'Copy the song link from Spotify and paste it here to load it.';
+          selectTrack();
         });
 
         spotifyResults.appendChild(item);
