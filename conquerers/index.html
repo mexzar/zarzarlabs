@@ -1270,10 +1270,10 @@ function tryMove(dx, dy) {
 
   turnCount++;
 
-  // Regenerate harvested trees and stones after 100 turns
+  // Regenerate harvested trees and stones after 50 turns
   for (let i = regenQueue.length - 1; i >= 0; i--) {
     const r = regenQueue[i];
-    if (turnCount - r.turnHarvested >= 100) {
+    if (turnCount - r.turnHarvested >= 50) {
       if (r.type === 'tree') {
         if (treeMap[r.y]) treeMap[r.y][r.x] = true;
       } else {
