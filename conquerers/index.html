@@ -142,7 +142,8 @@ canvas {
 </div>
 <div style="margin-top:6px; display:flex; justify-content:center;">
   <button onclick="showWageWarUI()" style="background:linear-gradient(180deg,#6a1a1a 0%,#3a0a0a 100%) !important; color:#ff8a65 !important; border:2px solid #ff5252 !important; padding:8px 28px; border-radius:6px; cursor:pointer; font-size:0.95rem; font-weight:bold; letter-spacing:2px; text-shadow:0 0 8px rgba(255,82,82,0.5); box-shadow:0 2px 12px rgba(255,50,50,0.3);">WAGE WAR</button>
-  <button onclick="quickMine()" style="background:linear-gradient(180deg,#1a4a1a 0%,#0a2a0a 100%) !important; color:#a5d6a7 !important; border:2px solid #66bb6a !important; padding:8px 28px; border-radius:6px; cursor:pointer; font-size:0.95rem; font-weight:bold; letter-spacing:2px; text-shadow:0 0 8px rgba(102,187,106,0.5); box-shadow:0 2px 12px rgba(76,175,80,0.3); margin-left:8px;">QUICK MINE (250g)</button>
+  <button onclick="quickMine()" style="background:linear-gradient(180deg,#1a4a1a 0%,#0a2a0a 100%) !important; color:#a5d6a7 !important; border:2px solid #66bb6a !important; padding:8px 28px; border-radius:6px; cursor:pointer; font-size:0.95rem; font-weight:bold; letter-spacing:2px; text-shadow:0 0 8px rgba(102,187,106,0.5); box-shadow:0 2px 12px rgba(76,175,80,0.3); margin-left:8px;">QUICK MINE (750g)</button>
+  <button onclick="upgradeStorage()" style="background:linear-gradient(180deg,#1a3a5a 0%,#0a1a3a 100%) !important; color:#90caf9 !important; border:2px solid #42a5f5 !important; padding:8px 28px; border-radius:6px; cursor:pointer; font-size:0.95rem; font-weight:bold; letter-spacing:2px; text-shadow:0 0 8px rgba(66,165,245,0.5); box-shadow:0 2px 12px rgba(33,150,243,0.3); margin-left:8px;">UPGRADE STORAGE (1000g)</button>
 </div>
 
 <div id="shop">
@@ -497,6 +498,7 @@ let player, enemies, forts, allies, chests, walls, gold, scouted, kills, mercCam
 let playerName = '';
 let particles = [], floatingTexts = [], ambientParticles = [];
 let turnCount = 0, animFrame = 0, shake = 0, tensionTimer = 0;
+let regenQueue = []; // { type: 'tree'|'stone', x, y, turnHarvested }
 let morale = 0;
 let upgrades = { armorPiercing: 0, extendedMag: 0, reinforced: 0, explosiveRounds: 0 };
 let followerTrail = [];
@@ -1267,6 +1269,19 @@ function tryMove(dx, dy) {
   moveQueue.push({ x: nx, y: ny });
 
   turnCount++;
+
+  // Regenerate harvested trees and stones after 100 turns
+  for (let i = regenQueue.length - 1; i >= 0; i--) {
+    const r = regenQueue[i];
+    if (turnCount - r.turnHarvested >= 100) {
+      if (r.type === 'tree') {
+        if (treeMap[r.y]) treeMap[r.y][r.x] = true;
+      } else {
+        walls.add(k(r.x, r.y));
+      }
+      regenQueue.splice(i, 1);
+    }
+  }
 
   // Auto-save every 15 turns
   if (turnCount % 15 === 0) {
@@ -2039,6 +2054,7 @@ function harvest() {
       const amt = 2 + toolBonus;
       resources.wood = Math.min(storageCap.wood, resources.wood + amt);
       treeMap[hy][hx] = false;
+      regenQueue.push({ type: 'tree', x: hx, y: hy, turnHarvested: turnCount });
       spawnParticles(hx, hy, '#8d6e63', 8, 3);
       spawnFloatingText(hx, hy, '+' + amt + ' Wood', '#8d6e63');
       harvested = true;
@@ -2052,6 +2068,7 @@ function harvest() {
         spawnFloatingText(hx, hy, '+1 Iron!', '#78909c');
       }
       walls.delete(k(hx, hy));
+      regenQueue.push({ type: 'stone', x: hx, y: hy, turnHarvested: turnCount });
       spawnParticles(hx, hy, '#90a4ae', 8, 3);
       spawnFloatingText(hx, hy, '+' + amt + ' Stone', '#90a4ae');
       harvested = true;
@@ -2064,8 +2081,8 @@ function harvest() {
 
 function quickMine() {
   if (gameMode !== 'overworld') return;
-  if (gold < 250) { msg('Need 250 gold for Quick Mine'); return; }
-  const radius = 15;
+  if (gold < 750) { msg('Need 750 gold for Quick Mine'); return; }
+  const radius = 10;
   const px = player.x, py = player.y;
   let woodGained = 0, stoneGained = 0, ironGained = 0;
   const toolBonus = getToolBonus();
@@ -2078,6 +2095,7 @@ function quickMine() {
         const amt = 2 + toolBonus;
         resources.wood = Math.min(storageCap.wood, resources.wood + amt);
         treeMap[hy][hx] = false;
+        regenQueue.push({ type: 'tree', x: hx, y: hy, turnHarvested: turnCount });
         woodGained += amt;
       }
       if (walls.has(k(hx, hy)) && !(waterMap[hy] && waterMap[hy][hx]) && !playerForts.some(f => f.gx === hx && f.gy === hy) && !forts.some(f => f.x === hx && f.y === hy)) {
@@ -2088,12 +2106,13 @@ function quickMine() {
           ironGained++;
         }
         walls.delete(k(hx, hy));
+        regenQueue.push({ type: 'stone', x: hx, y: hy, turnHarvested: turnCount });
         stoneGained += amt;
       }
     }
   }
   if (woodGained === 0 && stoneGained === 0) { msg('Nothing to mine nearby!'); return; }
-  gold -= 250;
+  gold -= 750;
   spawnParticles(px, py, '#66bb6a', 20, 5);
   let summary = 'Quick Mine: ';
   if (woodGained > 0) summary += '+' + woodGained + ' Wood ';
@@ -2101,6 +2120,18 @@ function quickMine() {
   if (ironGained > 0) summary += '+' + ironGained + ' Iron';
   spawnFloatingText(px, py, summary, '#a5d6a7');
   msg(summary);
+  updateHUD(); draw();
+}
+
+function upgradeStorage() {
+  if (gameMode !== 'overworld') return;
+  if (gold < 1000) { msg('Need 1000 gold to upgrade storage'); return; }
+  gold -= 1000;
+  storageCap.wood += 50;
+  storageCap.stone += 50;
+  spawnParticles(player.x, player.y, '#42a5f5', 15, 4);
+  spawnFloatingText(player.x, player.y, 'Storage +50!', '#90caf9');
+  msg('Storage upgraded! Wood: ' + storageCap.wood + ', Stone: ' + storageCap.stone);
   updateHUD(); draw();
 }
 
