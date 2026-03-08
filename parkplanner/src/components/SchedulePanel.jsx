@@ -311,16 +311,18 @@ export default function SchedulePanel({
 
   const handleGenerate = useCallback(() => {
     if (!selectedPark) return;
+    const myListIds = new Set(myListRides.map((r) => r.id));
+    const myListOnly = allRides.filter((r) => myListIds.has(r.id));
     const plan = generatePlan(
       selectedPark,
       assistantPrefs,
-      allRides,
+      myListOnly,
       rideDetails,
       walkingTimes
     );
     setGeneratedPlan(plan);
     setAssistantMode("preview");
-  }, [selectedPark, assistantPrefs, allRides, rideDetails, walkingTimes]);
+  }, [selectedPark, assistantPrefs, allRides, myListRides, rideDetails, walkingTimes]);
 
   const previewTimeline = useMemo(() => {
     if (!generatedPlan.length || !selectedPark) {
