@@ -679,111 +679,218 @@ function initParticles(){
 // ============================================================
 // BOT 3D MESH
 // ============================================================
+function makeWedgeGeo(fH,bH,len,w,bev){
+  const s=new THREE.Shape(),hl=len/2;
+  s.moveTo(hl,0);s.lineTo(hl,fH);s.lineTo(-hl,bH);s.lineTo(-hl,0);s.closePath();
+  const g=new THREE.ExtrudeGeometry(s,{depth:w,bevelEnabled:bev>0,bevelThickness:bev,bevelSize:bev,bevelSegments:1});
+  g.translate(0,0,-w/2);
+  return g;
+}
 function createBot3D(build,isPlayer){
   const group=new THREE.Group();
-  const wc=WEIGHT_CLASSES[build.weightClass];
-  const mat=MATERIALS[build.material];
-  const wp=WEAPONS[build.weapon];
-  const r=wc.radius;
-  const bh=r*0.45;
-
+  const wc=WEIGHT_CLASSES[build.weightClass],mat=MATERIALS[build.material],wp=WEAPONS[build.weapon];
+  const r=wc.radius,bh=r*0.45;
   const bodyCol=isPlayer?0x888890:0x4a3a30;
   const accentCol=build.accentColor||(isPlayer?0xcc8844:0x8b4513);
   const bodyMat=new THREE.MeshStandardMaterial({color:bodyCol,metalness:mat.metalness,roughness:mat.roughness});
-  const frameMat=new THREE.MeshStandardMaterial({color:0x444440,metalness:0.9,roughness:0.2});
-  const accentMat=new THREE.MeshStandardMaterial({color:accentCol,metalness:0.7,roughness:0.3,emissive:accentCol,emissiveIntensity:0.1});
+  const frameMat=new THREE.MeshStandardMaterial({color:0x333338,metalness:0.9,roughness:0.2});
+  const accentMat=new THREE.MeshStandardMaterial({color:accentCol,metalness:0.7,roughness:0.3,emissive:accentCol,emissiveIntensity:0.15});
   const weaponMat=new THREE.MeshStandardMaterial({color:0x999990,metalness:0.95,roughness:0.12});
   const armorMat=new THREE.MeshStandardMaterial({color:mat.color,metalness:mat.metalness,roughness:mat.roughness});
-
-  // CHASSIS - size based on weight class
-  const body=new THREE.Mesh(new THREE.BoxGeometry(r*1.6,bh,r*1.3),bodyMat);
-  body.position.y=bh*0.5+2;body.castShadow=true;body.receiveShadow=true;
-  group.add(body);
-
-  // Top plate
-  const top=new THREE.Mesh(new THREE.BoxGeometry(r*1.3,bh*0.12,r*1.0),accentMat);
-  top.position.y=bh+2;group.add(top);
-
-  // 4 WHEELS
   const wheelMat=new THREE.MeshStandardMaterial({color:0x1a1a18,metalness:0.1,roughness:0.9});
-  const wheelR=r*0.2, wheelW=r*0.1;
-  const wheelPositions=[
-    {x:r*0.55,z:r*0.6,key:'rightWheels'},
-    {x:r*0.55,z:-r*0.6,key:'leftWheels'},
-    {x:-r*0.55,z:r*0.6,key:'rightWheels'},
-    {x:-r*0.55,z:-r*0.6,key:'leftWheels'}
+  const bn=build.botName||'';
+  const isShell=bn==='Gigabyte';
+
+  // Chassis dimensions per weapon type
+  let fH,rH,cL,cW;
+  switch(wp.type){
+    case 'hbar':fH=r*0.06;rH=r*0.28;cL=r*1.6;cW=r*1.3;break;
+    case 'pflip':fH=r*0.04;rH=r*0.44;cL=r*1.5;cW=r*1.2;break;
+    case 'eflip':fH=r*0.05;rH=r*0.38;cL=r*1.4;cW=r*1.2;break;
+    case 'phammer':fH=r*0.14;rH=r*0.38;cL=r*1.4;cW=r*1.15;break;
+    default:fH=r*0.1;rH=r*0.42;cL=r*1.5;cW=r*1.15;break;
+  }
+  if(isShell){fH=r*0.3;rH=r*0.3;cL=r*1.6;cW=r*1.6;}
+
+  // === CHASSIS ===
+  if(isShell){
+    // Shell spinner: dome + base disc
+    const dome=new THREE.Mesh(new THREE.SphereGeometry(r*0.8,16,12,0,Math.PI*2,0,Math.PI*0.5),bodyMat);
+    dome.position.y=r*0.08+2;dome.castShadow=true;group.add(dome);
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(r*0.85,r*0.9,r*0.1,20),frameMat);
+    base.position.y=r*0.05+2;base.castShadow=true;group.add(base);
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(r*0.72,r*0.03,8,24),accentMat);
+    ring.rotation.x=Math.PI/2;ring.position.y=r*0.28+2;group.add(ring);
+    // Shell teeth
+    for(let i=0;i<4;i++){
+      const tooth=new THREE.Mesh(new THREE.BoxGeometry(r*0.12,r*0.1,r*0.2),accentMat);
+      const ang=i*Math.PI/2;
+      tooth.position.set(Math.cos(ang)*r*0.82,r*0.08+2,Math.sin(ang)*r*0.82);
+      tooth.rotation.y=-ang;tooth.castShadow=true;group.add(tooth);
+    }
+  } else {
+    // Wedge chassis
+    const chassis=new THREE.Mesh(makeWedgeGeo(fH,rH,cL,cW,r*0.015),bodyMat);
+    chassis.position.y=2;chassis.castShadow=true;chassis.receiveShadow=true;group.add(chassis);
+
+    // Sharp front wedge tip
+    if(wp.type!=='phammer'){
+      const tipLen=wp.type==='pflip'?r*0.2:r*0.12;
+      const tip=new THREE.Mesh(makeWedgeGeo(r*0.008,fH*0.8,tipLen,cW*0.92,0),frameMat);
+      tip.position.set(cL/2,2,0);tip.castShadow=true;group.add(tip);
+    }
+
+    // Top accent stripe
+    const avgTop=fH*0.3+rH*0.7;
+    const stripe=new THREE.Mesh(new THREE.BoxGeometry(cL*0.55,r*0.012,cW*0.1),accentMat);
+    stripe.position.set(-cL*0.06,2+avgTop+r*0.01,0);group.add(stripe);
+
+    // Side skirt rails
+    [-1,1].forEach(s=>{
+      const rail=new THREE.Mesh(new THREE.BoxGeometry(cL*0.7,r*0.035,r*0.025),frameMat);
+      rail.position.set(-cL*0.03,2+r*0.04,s*cW*0.48);rail.castShadow=true;group.add(rail);
+    });
+
+    // Internal frame crossbars visible through armor gaps
+    [-1,0,1].forEach(i=>{
+      const xb=new THREE.Mesh(new THREE.BoxGeometry(r*0.03,r*0.06,cW*0.7),frameMat);
+      const xPos=i*cL*0.25;
+      const yAtX=2+fH+(rH-fH)*(0.5-xPos/cL);
+      xb.position.set(xPos,yAtX*0.6+2,0);group.add(xb);
+    });
+
+    // Weapon-specific chassis features
+    if(wp.type==='phammer'||wp.type==='axe'){
+      // Top frame rails + crossbar for arm mount
+      const mH=r*0.28;
+      [-1,1].forEach(s=>{
+        const post=new THREE.Mesh(new THREE.CylinderGeometry(r*0.03,r*0.035,mH,6),frameMat);
+        post.position.set(-r*0.15,2+rH+mH/2,s*cW*0.3);post.castShadow=true;group.add(post);
+      });
+      const xbar=new THREE.Mesh(new THREE.CylinderGeometry(r*0.025,r*0.025,cW*0.6,6),frameMat);
+      xbar.rotation.x=Math.PI/2;xbar.position.set(-r*0.15,2+rH+mH,0);group.add(xbar);
+    }
+    if(wp.type==='pflip'){
+      // Pneumatic tank at rear
+      const tank=new THREE.Mesh(new THREE.CylinderGeometry(r*0.07,r*0.07,r*0.45,8),frameMat);
+      tank.rotation.z=Math.PI/2;tank.position.set(-r*0.3,2+rH*0.55,0);group.add(tank);
+      [-1,1].forEach(s=>{
+        const cap=new THREE.Mesh(new THREE.SphereGeometry(r*0.07,8,6),frameMat);
+        cap.position.set(-r*0.3+s*r*0.225,2+rH*0.55,0);group.add(cap);
+      });
+    }
+    if(wp.type==='hbar'){
+      // Spinner motor housing bump on top
+      const motor=new THREE.Mesh(new THREE.CylinderGeometry(r*0.12,r*0.14,r*0.08,10),frameMat);
+      motor.position.set(r*0.35,2+avgTop,0);group.add(motor);
+    }
+    if(wp.type==='eflip'){
+      // Electric motor box at rear
+      const mbox=new THREE.Mesh(new THREE.BoxGeometry(r*0.3,rH*0.4,cW*0.4),frameMat);
+      mbox.position.set(-cL*0.3,2+rH*0.5,0);group.add(mbox);
+    }
+  }
+
+  // === WHEELS with hub detail ===
+  const wR=r*0.2,wW=r*0.12;
+  const wPos=[
+    {x:r*0.45,z:r*0.65,key:'rightWheels'},{x:r*0.45,z:-r*0.65,key:'leftWheels'},
+    {x:-r*0.5,z:r*0.65,key:'rightWheels'},{x:-r*0.5,z:-r*0.65,key:'leftWheels'}
   ];
   const wheels=[];
-  wheelPositions.forEach(wp2=>{
-    const w=new THREE.Mesh(new THREE.CylinderGeometry(wheelR,wheelR,wheelW,12),wheelMat);
-    w.rotation.x=Math.PI/2;
-    w.position.set(wp2.x,wheelR,wp2.z);
-    w.castShadow=true;
-    w.userData.componentKey=wp2.key;
-    group.add(w);
-    wheels.push(w);
+  wPos.forEach(wp2=>{
+    const w=new THREE.Mesh(new THREE.CylinderGeometry(wR,wR,wW,14),wheelMat);
+    w.rotation.x=Math.PI/2;w.position.set(wp2.x,wR,wp2.z);
+    w.castShadow=true;w.userData.componentKey=wp2.key;
+    group.add(w);wheels.push(w);
+    // Hub cap
+    const hub=new THREE.Mesh(new THREE.CylinderGeometry(wR*0.35,wR*0.35,wW+0.4,6),frameMat);
+    hub.rotation.x=Math.PI/2;hub.position.set(wp2.x,wR,wp2.z);group.add(hub);
+    // Wheel guard
+    const guard=new THREE.Mesh(new THREE.BoxGeometry(wR*1.8,r*0.04,wW*0.7),bodyMat);
+    guard.position.set(wp2.x,wR*1.7,wp2.z);group.add(guard);
   });
   group.userData.wheels=wheels;
 
-  // ARMOR PANELS (detachable)
-  const panelThickness=r*0.06;
+  // === ARMOR PANELS (shaped to chassis) ===
+  const panelT=r*0.05;
+  const midH=2+(fH+rH)*0.35;
+  const pH=(fH+rH)*0.55;
   const armorPanels={};
-  // Front
-  const af=new THREE.Mesh(new THREE.BoxGeometry(panelThickness,bh*0.7,r*1.2),armorMat);
-  af.position.set(r*0.85,bh*0.5+2,0);af.castShadow=true;
+  // Front - angled to match wedge
+  const af=new THREE.Mesh(new THREE.BoxGeometry(panelT,fH*1.5+r*0.06,cW*0.88),armorMat);
+  af.position.set(cL*0.43,2+fH*0.6,0);af.castShadow=true;
   group.add(af);armorPanels.armorFront=af;
-  // Back
-  const ab=new THREE.Mesh(new THREE.BoxGeometry(panelThickness,bh*0.7,r*1.2),armorMat.clone());
-  ab.position.set(-r*0.85,bh*0.5+2,0);ab.castShadow=true;
+  // Back - taller to match rear height
+  const ab=new THREE.Mesh(new THREE.BoxGeometry(panelT,rH*0.85,cW*0.88),armorMat.clone());
+  ab.position.set(-cL*0.43,2+rH*0.42,0);ab.castShadow=true;
   group.add(ab);armorPanels.armorBack=ab;
-  // Left
-  const al=new THREE.Mesh(new THREE.BoxGeometry(r*1.5,bh*0.7,panelThickness),armorMat.clone());
-  al.position.set(0,bh*0.5+2,-r*0.7);al.castShadow=true;
+  // Left side
+  const alShape=makeWedgeGeo(fH*0.9,rH*0.75,cL*0.82,panelT,0);
+  const al=new THREE.Mesh(alShape,armorMat.clone());
+  al.position.set(0,2,-cW*0.49);al.castShadow=true;
   group.add(al);armorPanels.armorLeft=al;
-  // Right
-  const ar=new THREE.Mesh(new THREE.BoxGeometry(r*1.5,bh*0.7,panelThickness),armorMat.clone());
-  ar.position.set(0,bh*0.5+2,r*0.7);ar.castShadow=true;
-  group.add(ar);armorPanels.armorRight=ar;
+  // Right side
+  const arShape=makeWedgeGeo(fH*0.9,rH*0.75,cL*0.82,panelT,0);
+  const ar2=new THREE.Mesh(arShape,armorMat.clone());
+  ar2.position.set(0,2,cW*0.49);ar2.castShadow=true;
+  group.add(ar2);armorPanels.armorRight=ar2;
   group.userData.armorPanels=armorPanels;
 
-  // WEAPON
+  // === WEAPON ===
   const weaponGroup=new THREE.Group();
-  weaponGroup.position.set(r*0.5,bh*0.5+2,0);
+  const wMountY=2+(fH+rH)*0.35;
+  weaponGroup.position.set(r*0.5,wMountY,0);
   switch(wp.type){
     case 'hbar':{
-      const bar=new THREE.Mesh(new THREE.BoxGeometry(r*2.4,bh*0.18,r*0.2),weaponMat);
-      const tip1=new THREE.Mesh(new THREE.BoxGeometry(r*0.25,bh*0.25,r*0.3),accentMat);
+      // Spinning bar with impact teeth
+      const bar=new THREE.Mesh(new THREE.BoxGeometry(r*2.4,bh*0.15,r*0.18),weaponMat);
+      const tip1=new THREE.Mesh(new THREE.BoxGeometry(r*0.28,bh*0.22,r*0.28),accentMat);
       tip1.position.x=-r*1.1;bar.add(tip1);
       const tip2=tip1.clone();tip2.position.x=r*1.1;bar.add(tip2);
+      [-1,1].forEach(s=>{
+        const tooth=new THREE.Mesh(new THREE.BoxGeometry(r*0.06,bh*0.28,r*0.06),weaponMat);
+        tooth.position.set(s*r*1.25,0,s*r*0.08);bar.add(tooth);
+      });
       bar.castShadow=true;weaponGroup.add(bar);
       weaponGroup.userData.bar=bar;
       break;}
     case 'pflip':case 'eflip':{
-      const plateW=wp.type==='pflip'?r*0.6:r*0.5;
-      const plate=new THREE.Mesh(new THREE.BoxGeometry(plateW,bh*0.12,r*0.9),weaponMat);
+      const plateW=wp.type==='pflip'?r*0.65:r*0.5;
+      const plate=new THREE.Mesh(new THREE.BoxGeometry(plateW,bh*0.08,r*0.85),weaponMat);
       plate.position.x=r*0.25;plate.castShadow=true;
+      // Flipper lip edge
+      const lip=new THREE.Mesh(new THREE.BoxGeometry(r*0.04,bh*0.12,r*0.8),accentMat);
+      lip.position.set(plateW/2,0,0);plate.add(lip);
+      // Hinge brackets
+      [-1,1].forEach(s=>{
+        const brk=new THREE.Mesh(new THREE.BoxGeometry(r*0.08,bh*0.15,r*0.06),frameMat);
+        brk.position.set(-plateW*0.3,bh*0.08,s*r*0.35);plate.add(brk);
+      });
       const hinge=new THREE.Group();hinge.add(plate);
       weaponGroup.add(hinge);weaponGroup.userData.hinge=hinge;
-      // Pneumatic indicator
-      if(wp.type==='pflip'){
-        const tank=new THREE.Mesh(new THREE.CylinderGeometry(r*0.06,r*0.06,r*0.4,8),frameMat);
-        tank.rotation.z=Math.PI/2;tank.position.set(-r*0.3,bh*0.2,0);
-        weaponGroup.add(tank);
-      }
       break;}
     case 'phammer':{
-      const arm=new THREE.Mesh(new THREE.BoxGeometry(r*0.8,bh*0.15,bh*0.15),frameMat);
+      const arm=new THREE.Mesh(new THREE.BoxGeometry(r*0.85,bh*0.12,bh*0.12),frameMat);
       arm.position.x=r*0.3;arm.position.y=bh*0.4;
-      const head=new THREE.Mesh(new THREE.BoxGeometry(r*0.3,r*0.3,r*0.3),weaponMat);
-      head.position.x=r*0.7;arm.add(head);arm.castShadow=true;
+      // Hammer head with impact face
+      const head=new THREE.Mesh(new THREE.BoxGeometry(r*0.25,r*0.28,r*0.28),weaponMat);
+      head.position.x=r*0.7;arm.add(head);
+      const face=new THREE.Mesh(new THREE.BoxGeometry(r*0.04,r*0.3,r*0.3),accentMat);
+      face.position.x=r*0.14;head.add(face);
+      arm.castShadow=true;
       const pivot=new THREE.Group();pivot.add(arm);
       weaponGroup.add(pivot);weaponGroup.userData.pivot=pivot;
       break;}
     case 'axe':{
-      const shaft=new THREE.Mesh(new THREE.BoxGeometry(r*0.1,r*1.2,r*0.1),frameMat);
+      const shaft=new THREE.Mesh(new THREE.BoxGeometry(r*0.08,r*1.1,r*0.08),frameMat);
       shaft.position.y=r*0.5;
-      const blade=new THREE.Mesh(new THREE.BoxGeometry(r*0.4,r*0.3,r*0.05),weaponMat);
-      blade.position.y=r*0.9;shaft.add(blade);shaft.castShadow=true;
+      const blade=new THREE.Mesh(new THREE.BoxGeometry(r*0.35,r*0.28,r*0.04),weaponMat);
+      blade.position.y=r*0.85;shaft.add(blade);
+      // Cutting edge
+      const edge=new THREE.Mesh(new THREE.BoxGeometry(r*0.38,r*0.04,r*0.05),accentMat);
+      edge.position.set(0,-r*0.13,0);blade.add(edge);
+      shaft.castShadow=true;
       const pivot=new THREE.Group();pivot.add(shaft);
       weaponGroup.add(pivot);weaponGroup.userData.pivot=pivot;
       break;}
