@@ -36,6 +36,7 @@ jobs:
           cp -r conquerers output/
           cp -r SingersVoice output/
           cp -r tripplanner output/
+          cp -r battlebots output/
           cp -r parkplanner/dist output/parkplanner
 
       - name: Install SWA CLI and deploy
