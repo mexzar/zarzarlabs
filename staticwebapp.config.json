@@ -15,6 +15,9 @@
       "*.json"
     ]
   },
+  "globalHeaders": {
+    "Cache-Control": "no-cache, must-revalidate"
+  },
   "routes": [
     {
       "route": "/parkplanner",
