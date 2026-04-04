@@ -1972,7 +1972,7 @@ function updateVehicles(dt) {
       if (keys['KeyA'] || keys['ArrowLeft']) v.rot += turnSpeed * dt;
       if (keys['KeyD'] || keys['ArrowRight']) v.rot -= turnSpeed * dt;
       // Mouse steering - steer toward camera direction
-      const targetRot = camTheta + Math.PI;
+      const targetRot = camTheta;
       let rotDiff = targetRot - v.rot;
       while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
       while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
