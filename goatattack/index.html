@@ -811,7 +811,7 @@ function updatePlayer(dt) {
   if (activeMutation === 3) speed *= 2;   // Tiny = fast
   if (activeMutation === 4) speed *= 0.7; // Giant = slow
 
-  const forward = new THREE.Vector3(-Math.sin(camTheta), 0, -Math.cos(camTheta));
+  const forward = new THREE.Vector3(Math.sin(camTheta), 0, Math.cos(camTheta));
   const right = new THREE.Vector3(forward.z, 0, -forward.x);
   const moveDir = new THREE.Vector3();
 
@@ -821,7 +821,7 @@ function updatePlayer(dt) {
   if (keys['KeyD'] || keys['ArrowRight']) moveDir.add(right);
 
   // Goat always faces where mouse/camera is pointing
-  playerRot = camTheta + Math.PI;
+  playerRot = camTheta;
 
   if (moveDir.lengthSq() > 0) {
     moveDir.normalize();
@@ -1972,13 +1972,13 @@ function updateVehicles(dt) {
       if (keys['KeyA'] || keys['ArrowLeft']) v.rot += turnSpeed * dt;
       if (keys['KeyD'] || keys['ArrowRight']) v.rot -= turnSpeed * dt;
       // Mouse steering - steer toward camera direction
-      const targetRot = camTheta + Math.PI;
+      const targetRot = camTheta;
       let rotDiff = targetRot - v.rot;
       while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
       while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
       v.rot += rotDiff * dt * 4;
 
-      const forward = new THREE.Vector3(-Math.sin(v.rot), 0, -Math.cos(v.rot));
+      const forward = new THREE.Vector3(Math.sin(v.rot), 0, Math.cos(v.rot));
       // Mutation speed modifiers on vehicle
       let vSpeedMult = 1;
       if (activeMutation === 3) vSpeedMult = 2;      // Tiny = fast car
