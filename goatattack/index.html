@@ -45,7 +45,7 @@ canvas{display:block}
 <canvas id="minimap" width="160" height="160"></canvas>
 <div id="crosshair">+</div>
 <div id="pauseOverlay"><h2>PAUSED</h2><p>Click to resume &bull; ESC to pause</p></div>
-<div id="controls">WASD - Move &nbsp; SPACE - Jump &nbsp; LMB - Headbutt<br>E - Mount/Dismount &nbsp; F - Use Vehicle &nbsp; TAB - Hats<br>SHIFT - Sprint &nbsp; ESC - Pause</div>
+<div id="controls">WASD/Arrows - Move &nbsp; SPACE - Jump &nbsp; LMB - Headbutt<br>E - Mount/Dismount &nbsp; F - Use Vehicle &nbsp; Q - Lick/Release<br>TAB - Hats &nbsp; SHIFT - Sprint &nbsp; ESC - Pause</div>
 <div id="hatNotify"></div>
 <div id="slowmoVignette"></div>
 
@@ -70,7 +70,7 @@ const SLOWMO_DUR = 1.5;
 const SLOWMO_FACTOR = 0.15;
 const NPC_COUNT = 40;
 const VEHICLE_COUNT = 15;
-const MUTATION_ORB_COUNT = 12;
+const MUTATION_ORB_COUNT = 20;
 const MUTATION_DUR = 30;
 const MAX_DEBRIS = 200;
 const MAX_PARTICLES = 1000;
@@ -126,6 +126,7 @@ let mountedVehicle = null;
 let equippedHat = -1;
 let slowmoTimer = 0, slowmoFactor = 1;
 let walkCycle = 0;
+let tongueMesh = null, tongueTarget = null, lickActive = false;
 
 let buildings = [];
 let props = [];
@@ -433,104 +434,340 @@ function initTextures() {
 function createGoat() {
   goatGroup = new THREE.Group();
 
-  const furMat = new THREE.MeshStandardMaterial({color:0xeeeeee,roughness:0.9});
-  const darkMat = new THREE.MeshStandardMaterial({color:0x333333});
-  const hornMat = new THREE.MeshStandardMaterial({color:0xccbb88,roughness:0.4});
-  const eyeMat = new THREE.MeshStandardMaterial({color:0xffff00,emissive:0x444400});
-  const noseMat = new THREE.MeshStandardMaterial({color:0xffaaaa});
+  // Materials - realistic goat coloring
+  const furMat = new THREE.MeshStandardMaterial({color:0xddd5c8,roughness:0.95,metalness:0});
+  const bellyMat = new THREE.MeshStandardMaterial({color:0xeee8dd,roughness:0.95});
+  const darkFurMat = new THREE.MeshStandardMaterial({color:0x998877,roughness:0.9});
+  const darkMat = new THREE.MeshStandardMaterial({color:0x222222});
+  const hornMat = new THREE.MeshStandardMaterial({color:0xaa9966,roughness:0.3,metalness:0.1});
+  const hoofMat = new THREE.MeshStandardMaterial({color:0x3a3a3a,roughness:0.6});
+  const eyeMat = new THREE.MeshStandardMaterial({color:0xddcc44,emissive:0x332200,emissiveIntensity:0.3});
+  const noseMat = new THREE.MeshStandardMaterial({color:0xcc9999,roughness:0.7});
+  const innerEarMat = new THREE.MeshStandardMaterial({color:0xddaaaa,roughness:0.8});
+  const tongueMat = new THREE.MeshStandardMaterial({color:0xcc6677});
 
-  // Body
+  // === TORSO (barrel-shaped, wider at ribs, tapers to hindquarters) ===
+  // Main barrel
   goatBody = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.6, 1.6, 8, 12),
+    new THREE.CapsuleGeometry(0.5, 0.0, 12, 16),
     furMat
   );
   goatBody.rotation.z = Math.PI / 2;
-  goatBody.position.y = 0.9;
+  goatBody.position.set(0, 1.05, 0);
+  goatBody.scale.set(0.95, 0.82, 0.8);
   goatBody.castShadow = true;
   goatGroup.add(goatBody);
 
-  // Head
+  // Chest (wider front)
+  const chest = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 10), furMat);
+  chest.position.set(0, 1.05, 0.6);
+  chest.scale.set(0.85, 0.95, 0.7);
+  chest.castShadow = true;
+  goatGroup.add(chest);
+
+  // Belly underside
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), bellyMat);
+  belly.position.set(0, 0.7, 0);
+  belly.scale.set(0.8, 0.5, 1.2);
+  goatGroup.add(belly);
+
+  // Rump (rounded hindquarters)
+  const rump = new THREE.Mesh(new THREE.SphereGeometry(0.45, 10, 10), furMat);
+  rump.position.set(0, 1.05, -0.7);
+  rump.scale.set(0.8, 0.9, 0.7);
+  rump.castShadow = true;
+  goatGroup.add(rump);
+
+  // Shoulder hump
+  const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), furMat);
+  shoulder.position.set(0, 1.35, 0.5);
+  shoulder.scale.set(0.75, 0.6, 0.7);
+  goatGroup.add(shoulder);
+
+  // Spine ridge
+  const spine = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 1.6, 4, 6), darkFurMat);
+  spine.rotation.z = Math.PI / 2;
+  spine.position.set(0, 1.45, 0);
+  goatGroup.add(spine);
+
+  // === NECK (thick, muscular, angled forward) ===
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 0.7, 10), furMat);
+  neck.position.set(0, 1.35, 0.9);
+  neck.rotation.x = -0.5;
+  neck.castShadow = true;
+  goatGroup.add(neck);
+
+  // Neck fur/mane (underside shagginess)
+  const neckFur = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.25, 0.5, 6), bellyMat);
+  neckFur.position.set(0, 1.1, 0.85);
+  neckFur.rotation.x = -0.4;
+  goatGroup.add(neckFur);
+
+  // === HEAD ===
   goatHead = new THREE.Group();
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), furMat);
-  skull.scale.set(1, 0.9, 1.2);
+
+  // Skull - elongated, slightly rectangular
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10), furMat);
+  skull.scale.set(0.85, 0.85, 1.15);
+  skull.castShadow = true;
   goatHead.add(skull);
 
-  // Snout
-  const snout = new THREE.Mesh(new THREE.SphereGeometry(0.2, 6, 6), furMat);
-  snout.position.set(0, -0.1, 0.35);
-  snout.scale.set(0.8, 0.6, 1);
+  // Brow ridge
+  const brow = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), furMat);
+  brow.position.set(0, 0.15, 0.15);
+  brow.scale.set(1.2, 0.5, 0.8);
+  goatHead.add(brow);
+
+  // Snout - longer, more rectangular like a real goat
+  const snout = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.2, 8, 10), furMat);
+  snout.position.set(0, -0.08, 0.35);
+  snout.rotation.x = 0.2;
+  snout.scale.set(0.9, 0.7, 1);
   goatHead.add(snout);
 
-  // Nose
-  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), noseMat);
-  nose.position.set(0, -0.05, 0.5);
-  goatHead.add(nose);
+  // Nose bridge
+  const noseBridge = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 6), furMat);
+  noseBridge.position.set(0, 0.02, 0.38);
+  noseBridge.scale.set(0.7, 0.5, 1);
+  goatHead.add(noseBridge);
 
-  // Eyes
+  // Nose pad
+  const nosePad = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), noseMat);
+  nosePad.position.set(0, -0.1, 0.5);
+  nosePad.scale.set(0.8, 0.5, 0.6);
+  goatHead.add(nosePad);
+
+  // Nostrils
   for(let s = -1; s <= 1; s += 2){
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 6), eyeMat);
-    eye.position.set(s * 0.22, 0.1, 0.25);
+    const nostril = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), darkMat);
+    nostril.position.set(s * 0.06, -0.12, 0.53);
+    goatHead.add(nostril);
+  }
+
+  // Mouth line
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.01, 0.02), darkMat);
+  mouth.position.set(0, -0.18, 0.45);
+  goatHead.add(mouth);
+
+  // Tongue (hidden by default, extends when licking)
+  tongueMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.06, 0.02, 1),
+    new THREE.MeshStandardMaterial({color:0xee5577, roughness:0.6})
+  );
+  tongueMesh.position.set(0, -0.19, 0.95);
+  tongueMesh.visible = false;
+  goatHead.add(tongueMesh);
+
+  // Lower jaw
+  const jaw = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), furMat);
+  jaw.position.set(0, -0.18, 0.28);
+  jaw.scale.set(0.8, 0.5, 1);
+  goatHead.add(jaw);
+
+  // Eyes - horizontal slit pupils like real goats
+  for(let s = -1; s <= 1; s += 2){
+    // Eye socket (slight indent)
+    const socket = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), darkFurMat);
+    socket.position.set(s * 0.22, 0.08, 0.2);
+    goatHead.add(socket);
+    // Eyeball
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), eyeMat);
+    eye.position.set(s * 0.23, 0.08, 0.24);
     goatHead.add(eye);
-    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), darkMat);
-    pupil.position.set(s * 0.22, 0.1, 0.32);
+    // Horizontal slit pupil (goat signature!)
+    const pupil = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.01), darkMat);
+    pupil.position.set(s * 0.23, 0.08, 0.31);
     goatHead.add(pupil);
   }
 
-  // Ears
+  // Ears - floppy, drooping sideways like real goats
   for(let s = -1; s <= 1; s += 2){
-    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.25, 4), furMat);
-    ear.position.set(s * 0.3, 0.15, -0.1);
-    ear.rotation.z = s * 0.5;
-    ear.rotation.x = 0.3;
-    goatHead.add(ear);
+    const earGroup = new THREE.Group();
+    // Outer ear
+    const ear = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.2, 4, 6), furMat);
+    ear.rotation.z = s * 1.3;
+    ear.rotation.x = 0.2;
+    ear.castShadow = true;
+    earGroup.add(ear);
+    // Inner ear (pink)
+    const innerEar = new THREE.Mesh(new THREE.CapsuleGeometry(0.04, 0.15, 4, 6), innerEarMat);
+    innerEar.rotation.z = s * 1.3;
+    innerEar.rotation.x = 0.2;
+    innerEar.position.set(s * 0.01, 0, 0.01);
+    earGroup.add(innerEar);
+    earGroup.position.set(s * 0.28, 0.1, -0.05);
+    goatHead.add(earGroup);
   }
 
-  // Horns
-  goatHornL = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.5, 6), hornMat);
-  goatHornL.position.set(-0.2, 0.35, -0.1);
-  goatHornL.rotation.z = 0.3;
-  goatHornL.rotation.x = -0.3;
-  goatHead.add(goatHornL);
+  // Horns - curved backward like real goat horns (multi-segment)
+  for(let s = -1; s <= 1; s += 2) {
+    const hornGroup = new THREE.Group();
+    // Base
+    const hBase = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 0.18, 8), hornMat);
+    hBase.position.y = 0.09;
+    hornGroup.add(hBase);
+    // Mid section
+    const hMid = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.055, 0.2, 8), hornMat);
+    hMid.position.set(0, 0.23, -0.05);
+    hMid.rotation.x = 0.4;
+    hornGroup.add(hMid);
+    // Tip curves back
+    const hTip = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.2, 8), hornMat);
+    hTip.position.set(0, 0.35, -0.15);
+    hTip.rotation.x = 0.8;
+    hornGroup.add(hTip);
+    // Ridges on horns
+    for(let r = 0; r < 4; r++) {
+      const ridge = new THREE.Mesh(new THREE.TorusGeometry(0.055 - r*0.005, 0.008, 4, 8), hornMat);
+      ridge.position.set(0, 0.06 + r*0.06, -r*0.015);
+      ridge.rotation.x = Math.PI/2 + r*0.1;
+      hornGroup.add(ridge);
+    }
+    hornGroup.position.set(s * 0.15, 0.25, -0.08);
+    hornGroup.rotation.z = s * -0.2;
+    if(s === -1) goatHornL = hornGroup; else goatHornR = hornGroup;
+    goatHead.add(hornGroup);
+  }
 
-  goatHornR = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.5, 6), hornMat);
-  goatHornR.position.set(0.2, 0.35, -0.1);
-  goatHornR.rotation.z = -0.3;
-  goatHornR.rotation.x = -0.3;
-  goatHead.add(goatHornR);
+  // Beard - wispy, multiple strands
+  const beardGroup = new THREE.Group();
+  for(let i = 0; i < 5; i++) {
+    const strand = new THREE.Mesh(
+      new THREE.ConeGeometry(0.02 + Math.random()*0.02, 0.15 + Math.random()*0.15, 4),
+      bellyMat
+    );
+    strand.position.set(
+      (Math.random()-0.5)*0.08,
+      -0.08 - i*0.03,
+      0
+    );
+    strand.rotation.x = 0.2;
+    strand.rotation.z = (Math.random()-0.5)*0.3;
+    beardGroup.add(strand);
+  }
+  beardGroup.position.set(0, -0.15, 0.3);
+  goatHead.add(beardGroup);
 
-  // Beard
-  const beard = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.3, 4), furMat);
-  beard.position.set(0, -0.25, 0.2);
-  goatHead.add(beard);
+  // Dark face stripe (blaze) - common goat marking
+  const faceStripe = new THREE.Mesh(
+    new THREE.BoxGeometry(0.06, 0.04, 0.35),
+    darkFurMat
+  );
+  faceStripe.position.set(0, 0.05, 0.22);
+  goatHead.add(faceStripe);
 
-  goatHead.position.set(0, 1.2, 1.1);
+  // Dark muzzle shading
+  const muzzleDark = new THREE.Mesh(
+    new THREE.SphereGeometry(0.13, 8, 6),
+    darkFurMat
+  );
+  muzzleDark.position.set(0, -0.06, 0.4);
+  muzzleDark.scale.set(0.75, 0.5, 0.8);
+  goatHead.add(muzzleDark);
+
+  // Dark patches around eyes
+  for(let s = -1; s <= 1; s += 2){
+    const eyePatch = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), darkFurMat);
+    eyePatch.position.set(s * 0.2, 0.12, 0.17);
+    eyePatch.scale.set(1.2, 0.8, 0.6);
+    goatHead.add(eyePatch);
+  }
+
+  goatHead.position.set(0, 1.55, 1.15);
+  goatHead.rotation.x = 0.15;
   goatGroup.add(goatHead);
 
   // Hat mount point
   hatMount = new THREE.Group();
-  hatMount.position.set(0, 0.35, 0);
+  hatMount.position.set(0, 0.3, 0);
   goatHead.add(hatMount);
 
-  // Legs
+  // === LEGS (upper + lower segments + proper joints) ===
   goatLegs = [];
-  const legPositions = [[-0.3,0,0.5],[0.3,0,0.5],[-0.3,0,-0.5],[0.3,0,-0.5]];
-  for(const [lx,ly,lz] of legPositions){
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.06,0.8,6), furMat);
-    leg.position.set(lx, 0.4, lz);
-    leg.castShadow = true;
-    goatGroup.add(leg);
-    goatLegs.push(leg);
-    // Hoof
-    const hoof = new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.08,0.1,6), darkMat);
-    hoof.position.set(lx, 0.05, lz);
-    goatGroup.add(hoof);
+  const legDefs = [
+    {x:-0.3, z:0.55, upper:0.45, lower:0.4, front:true},
+    {x:0.3,  z:0.55, upper:0.45, lower:0.4, front:true},
+    {x:-0.3, z:-0.55, upper:0.5, lower:0.42, front:false},
+    {x:0.3,  z:-0.55, upper:0.5, lower:0.42, front:false}
+  ];
+  for(const def of legDefs){
+    const legGroup = new THREE.Group();
+
+    // Upper leg (thicker)
+    const upper = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.09, 0.07, def.upper, 8),
+      furMat
+    );
+    upper.position.y = -def.upper/2;
+    upper.castShadow = true;
+    legGroup.add(upper);
+
+    // Knee joint
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), furMat);
+    knee.position.y = -def.upper;
+    legGroup.add(knee);
+
+    // Lower leg (thinner) - dark stockings like real goats
+    const lower = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.06, 0.05, def.lower, 8),
+      darkFurMat
+    );
+    lower.position.y = -def.upper - def.lower/2;
+    lower.castShadow = true;
+    legGroup.add(lower);
+
+    // Fetlock (ankle tuft)
+    const fetlock = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), bellyMat);
+    fetlock.position.y = -def.upper - def.lower;
+    fetlock.scale.set(1, 0.7, 1.2);
+    legGroup.add(fetlock);
+
+    // Hoof - split like a real goat
+    for(let hs = -1; hs <= 1; hs += 2) {
+      const hoof = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.03, 0.035, 0.08, 6),
+        hoofMat
+      );
+      hoof.position.set(hs * 0.025, -def.upper - def.lower - 0.04, 0.01);
+      legGroup.add(hoof);
+    }
+
+    legGroup.position.set(def.x, 0.9 + (def.front ? 0.05 : 0), def.z);
+    goatGroup.add(legGroup);
+    goatLegs.push(legGroup);
   }
 
-  // Tail
-  goatTail = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.35, 4), furMat);
-  goatTail.position.set(0, 1.1, -1.0);
-  goatTail.rotation.x = 0.8;
-  goatGroup.add(goatTail);
+  // === TAIL (short, upright like a real goat) ===
+  const tailGroup = new THREE.Group();
+  const tailBase = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.03, 0.2, 6), furMat);
+  tailBase.position.y = 0.1;
+  tailGroup.add(tailBase);
+  const tailTuft = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), bellyMat);
+  tailTuft.position.y = 0.2;
+  tailGroup.add(tailTuft);
+  tailGroup.position.set(0, 1.15, -0.95);
+  tailGroup.rotation.x = -0.5;
+  goatTail = tailGroup;
+  goatGroup.add(tailGroup);
+
+  // === FUR TUFTS (shoulder/hip for realism) ===
+  const tuftMat = new THREE.MeshStandardMaterial({color:0xccbfb0,roughness:1});
+  for(let i = 0; i < 6; i++){
+    const tuft = new THREE.Mesh(new THREE.SphereGeometry(0.08 + Math.random()*0.06, 5, 5), tuftMat);
+    tuft.position.set(
+      (Math.random()-0.5)*0.6,
+      0.9 + Math.random()*0.4,
+      (Math.random()-0.5)*1.4
+    );
+    tuft.scale.set(1, 0.6, 1);
+    goatGroup.add(tuft);
+  }
+
+  // === UDDER (because it's a goat) ===
+  const udder = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), noseMat);
+  udder.position.set(0, 0.5, -0.3);
+  udder.scale.set(0.8, 0.7, 0.9);
+  goatGroup.add(udder);
 
   goatGroup.position.copy(playerPos);
   scene.add(goatGroup);
@@ -578,16 +815,18 @@ function updatePlayer(dt) {
   const right = new THREE.Vector3(forward.z, 0, -forward.x);
   const moveDir = new THREE.Vector3();
 
-  if (keys['KeyW']) moveDir.add(forward);
-  if (keys['KeyS']) moveDir.sub(forward);
-  if (keys['KeyA']) moveDir.sub(right);
-  if (keys['KeyD']) moveDir.add(right);
+  if (keys['KeyW'] || keys['ArrowUp']) moveDir.add(forward);
+  if (keys['KeyS'] || keys['ArrowDown']) moveDir.sub(forward);
+  if (keys['KeyA'] || keys['ArrowLeft']) moveDir.sub(right);
+  if (keys['KeyD'] || keys['ArrowRight']) moveDir.add(right);
+
+  // Goat always faces where mouse/camera is pointing
+  playerRot = camTheta + Math.PI;
 
   if (moveDir.lengthSq() > 0) {
     moveDir.normalize();
     playerVel.x = lerp(playerVel.x, moveDir.x * speed, dt * 10);
     playerVel.z = lerp(playerVel.z, moveDir.z * speed, dt * 10);
-    playerRot = Math.atan2(moveDir.x, moveDir.z);
     walkCycle += dt * speed * 0.5;
   } else {
     playerVel.x *= (1 - dt * 8);
@@ -599,7 +838,7 @@ function updatePlayer(dt) {
 
   // Jump
   if ((keys['Space']) && onGround) {
-    playerVel.y = JUMP_VEL * (activeMutation === 3 ? 1.5 : activeMutation === 4 ? 1.3 : 1);
+    playerVel.y = JUMP_VEL * (activeMutation === 3 ? 1.5 : activeMutation === 4 ? 2.0 : 1);
     onGround = false;
     playSound('bleat');
   }
@@ -634,22 +873,33 @@ function updatePlayer(dt) {
   playerPos.z = clamp(playerPos.z, -halfW, halfW);
 
   // Collide with buildings/props
-  const nearby = queryGrid(playerPos.x, playerPos.z, 3);
+  const isGiant = activeMutation === 4;
+  const goatRadius = isGiant ? 6 : 3;
+  const goatSize = isGiant ? new THREE.Vector3(5, 9, 5) : new THREE.Vector3(1, 1.8, 1);
+  const nearby = queryGrid(playerPos.x, playerPos.z, goatRadius);
   for (const obj of nearby) {
     if (!obj.mesh || !obj.mesh.parent) continue;
     _box1.setFromObject(obj.mesh);
-    const goatBox = new THREE.Box3().setFromCenterAndSize(
-      playerPos, new THREE.Vector3(1, 1.8, 1)
-    );
+    const goatBox = new THREE.Box3().setFromCenterAndSize(playerPos, goatSize);
     if (goatBox.intersectsBox(_box1)) {
-      // Push goat out
-      const center = new THREE.Vector3();
-      _box1.getCenter(center);
-      const push = playerPos.clone().sub(center);
-      push.y = 0;
-      if (push.lengthSq() > 0) {
-        push.normalize().multiplyScalar(dt * 20);
-        playerPos.add(push);
+      if (isGiant && obj.breakable) {
+        // Giant goat smashes through everything on contact
+        const wp = new THREE.Vector3();
+        obj.mesh.getWorldPosition(wp);
+        damageAt(wp, goatRadius, 50);
+        spawnParticles(wp.x, wp.y, wp.z, 'dust', 12);
+        spawnParticles(wp.x, wp.y + 1, wp.z, 'spark', 5);
+        playSound('crash');
+      } else if (!isGiant) {
+        // Normal goat gets pushed out
+        const center = new THREE.Vector3();
+        _box1.getCenter(center);
+        const push = playerPos.clone().sub(center);
+        push.y = 0;
+        if (push.lengthSq() > 0) {
+          push.normalize().multiplyScalar(dt * 20);
+          playerPos.add(push);
+        }
       }
     }
   }
@@ -666,6 +916,26 @@ function updatePlayer(dt) {
       goatLegs[i].rotation.x = Math.sin(walkCycle + phase + side * 0.5) * 0.4;
     }
     goatTail.rotation.z = Math.sin(walkCycle * 2) * 0.3;
+  } else {
+    // Idle animations - breathing, looking around, tail sway
+    const idleTime = performance.now() * 0.001;
+    // Breathing - subtle body pulse
+    const breath = 1 + Math.sin(idleTime * 1.5) * 0.012;
+    goatBody.scale.set(0.95 * breath, 0.82, 0.8);
+    // Legs settle to rest
+    for (let i = 0; i < 4; i++) {
+      goatLegs[i].rotation.x = lerp(goatLegs[i].rotation.x, 0, dt * 5);
+    }
+    // Gentle tail wag
+    goatTail.rotation.z = Math.sin(idleTime * 0.8) * 0.15;
+    // Head looks around slowly
+    goatHead.rotation.y = Math.sin(idleTime * 0.3) * 0.12;
+    // Occasional ear twitch (simulated via head tilt)
+    if (Math.sin(idleTime * 2.7) > 0.95) {
+      goatHead.rotation.z = Math.sin(idleTime * 8) * 0.05;
+    } else {
+      goatHead.rotation.z = lerp(goatHead.rotation.z || 0, 0, dt * 3);
+    }
   }
 
   // Headbutt animation
@@ -679,15 +949,63 @@ function updatePlayer(dt) {
   if (activeMutation === 3) {
     goatGroup.scale.lerp(new THREE.Vector3(0.4, 0.4, 0.4), dt * 5);
   } else if (activeMutation === 4) {
-    goatGroup.scale.lerp(new THREE.Vector3(2.5, 2.5, 2.5), dt * 5);
+    goatGroup.scale.lerp(new THREE.Vector3(5, 5, 5), dt * 5);
   } else {
     goatGroup.scale.lerp(new THREE.Vector3(1, 1, 1), dt * 5);
   }
 
   // Giant goat earthquake stomp
   if (activeMutation === 4 && onGround && playerVel.y === 0 && Math.random() < dt * 2) {
-    damageAt(playerPos, 6, 8);
-    spawnParticles(playerPos.x, 0.1, playerPos.z, 'dust', 15);
+    damageAt(playerPos, 12, 16);
+    spawnParticles(playerPos.x, 0.1, playerPos.z, 'dust', 25);
+  }
+
+  // Lick / tongue - Q to toggle
+  if (keys['KeyQ'] && !lickActive && !tongueTarget) {
+    // Try to grab nearest NPC
+    const dir = new THREE.Vector3(-Math.sin(playerRot), 0, -Math.cos(playerRot));
+    const tongueReach = activeMutation === 4 ? 12 : activeMutation === 8 ? 8 : 4;
+    let closest = null, closestDist = tongueReach;
+    for (const npc of npcs) {
+      if (npc.state === 'ragdoll') continue;
+      const d = dist2D(playerPos.x + dir.x * 2, playerPos.z + dir.z * 2, npc.group.position.x, npc.group.position.z);
+      if (d < closestDist) { closestDist = d; closest = npc; }
+    }
+    if (closest) {
+      tongueTarget = closest;
+      lickActive = true;
+      tongueMesh.visible = true;
+      closest.state = 'licked';
+      playSound('bleat');
+    }
+    keys['KeyQ'] = false;
+  } else if (keys['KeyQ'] && lickActive && tongueTarget) {
+    // Release - fling the NPC
+    const dir = new THREE.Vector3(-Math.sin(playerRot), 0.5, -Math.cos(playerRot));
+    npcRagdoll(tongueTarget, dir.multiplyScalar(25));
+    tongueTarget = null;
+    lickActive = false;
+    tongueMesh.visible = false;
+    playSound('hit');
+    keys['KeyQ'] = false;
+  }
+
+  // Update stuck NPC position to follow tongue tip
+  if (tongueTarget && lickActive) {
+    const fwd = new THREE.Vector3(-Math.sin(playerRot), 0, -Math.cos(playerRot));
+    const tongueLen = activeMutation === 4 ? 6 : activeMutation === 8 ? 4 : 2;
+    const tipPos = playerPos.clone().add(fwd.multiplyScalar(tongueLen)).add(new THREE.Vector3(0, 1.5, 0));
+    tongueTarget.group.position.copy(tipPos);
+    tongueTarget.group.rotation.set(0, playerRot, Math.sin(performance.now() * 0.005) * 0.5);
+    // Scale tongue mesh to reach the NPC
+    tongueMesh.scale.z = tongueLen * 0.8;
+    tongueMesh.position.z = 0.45 + tongueLen * 0.4;
+    // If target somehow lost
+    if (!tongueTarget.group.parent) {
+      tongueTarget = null;
+      lickActive = false;
+      tongueMesh.visible = false;
+    }
   }
 }
 
@@ -698,7 +1016,7 @@ function doHeadbutt() {
 
   // Mutation modifiers
   if (activeMutation === 5) force *= 3;  // Rocket
-  if (activeMutation === 4) force *= 2;  // Giant
+  if (activeMutation === 4) force *= 4;  // Giant
   if (activeMutation === 7) force *= 1.5; // Demon
 
   damageAt(hitPos, HEADBUTT_RADIUS, force);
@@ -1449,6 +1767,8 @@ function npcRagdoll(npc, impulse) {
 
 function updateNPCs(dt) {
   for (const npc of npcs) {
+    if (npc.state === 'licked') continue; // Stuck to tongue, skip update
+
     if (npc.frozen && npc.state === 'ragdoll') {
       npc.ragdollTimer -= dt * 0.3; // Slow thaw
       if (npc.ragdollTimer <= 0) {
@@ -1649,12 +1969,23 @@ function updateVehicles(dt) {
       const vt = VEHICLE_TYPES[v.type];
       const turnSpeed = 2.5;
 
-      if (keys['KeyA']) v.rot += turnSpeed * dt;
-      if (keys['KeyD']) v.rot -= turnSpeed * dt;
+      if (keys['KeyA'] || keys['ArrowLeft']) v.rot += turnSpeed * dt;
+      if (keys['KeyD'] || keys['ArrowRight']) v.rot -= turnSpeed * dt;
+      // Mouse steering - steer toward camera direction
+      const targetRot = camTheta + Math.PI;
+      let rotDiff = targetRot - v.rot;
+      while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+      while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+      v.rot += rotDiff * dt * 4;
 
       const forward = new THREE.Vector3(-Math.sin(v.rot), 0, -Math.cos(v.rot));
-      if (keys['KeyW']) v.vel.add(forward.clone().multiplyScalar(vt.speed * dt));
-      if (keys['KeyS']) v.vel.add(forward.clone().multiplyScalar(-vt.speed * 0.5 * dt));
+      // Mutation speed modifiers on vehicle
+      let vSpeedMult = 1;
+      if (activeMutation === 3) vSpeedMult = 2;      // Tiny = fast car
+      if (activeMutation === 5) vSpeedMult = 1.8;    // Rocket = fast car
+      if (activeMutation === 4) vSpeedMult = 1.2;    // Giant = slightly faster (heavy momentum)
+      if (keys['KeyW'] || keys['ArrowUp']) v.vel.add(forward.clone().multiplyScalar(vt.speed * vSpeedMult * dt));
+      if (keys['KeyS'] || keys['ArrowDown']) v.vel.add(forward.clone().multiplyScalar(-vt.speed * vSpeedMult * 0.5 * dt));
 
       v.vel.multiplyScalar(1 - dt * 2); // friction
       v.group.position.add(v.vel.clone().multiplyScalar(dt));
@@ -1667,29 +1998,77 @@ function updateVehicles(dt) {
       goatGroup.position.y = VEHICLE_TYPES[v.type].size[1] + 0.3;
       goatGroup.rotation.y = v.rot;
 
-      // Vehicle damage on collision with stuff
-      if (v.vel.length() > 5) {
-        const nearby = queryGrid(v.group.position.x, v.group.position.z, 3);
+      // Mutation vehicle scaling
+      const vScaleTarget = activeMutation === 4 ? 3.5 : activeMutation === 3 ? 0.5 : 1;
+      v.group.scale.lerp(new THREE.Vector3(vScaleTarget, vScaleTarget, vScaleTarget), dt * 5);
+
+      // Vehicle damage on collision - car breaks walls on contact
+      const vSpeed = v.vel.length();
+      const sizeMult = activeMutation === 4 ? 3.5 : activeMutation === 3 ? 0.5 : 1;
+      const collideR = (Math.max(vt.size[0], vt.size[2]) / 2 + 0.5) * sizeMult;
+      const forceMult = activeMutation === 4 ? 5 : activeMutation === 5 ? 3 : 1;
+      if (vSpeed > 0.5 || (activeMutation === 4 && vSpeed > 0.1)) {
+        const nearby = queryGrid(v.group.position.x, v.group.position.z, collideR + 6);
+        let crashed = false;
         for (const obj of nearby) {
-          if (obj.breakable && obj.mesh && obj.mesh.parent) {
-            damageAt(v.group.position, 3, v.vel.length() * 2);
-            playSound('crash');
-            break;
+          if (!obj.mesh || !obj.mesh.parent) continue;
+          if (obj.breakable) {
+            const wp = new THREE.Vector3();
+            obj.mesh.getWorldPosition(wp);
+            const d = dist2D(v.group.position.x, v.group.position.z, wp.x, wp.z);
+            if (d < collideR + 1.5) {
+              const force = Math.max(vSpeed * vt.mass * 2 * forceMult, 25 * forceMult);
+              damageAt(wp, collideR + 1, force);
+              if (!crashed) {
+                spawnParticles(wp.x, wp.y, wp.z, 'dust', 12);
+                spawnParticles(wp.x, wp.y + 1, wp.z, 'spark', 6);
+                // Fire mutation: ignite on crash
+                if (activeMutation === 0) spawnParticles(wp.x, wp.y, wp.z, 'fire', 15);
+                // Electric mutation: sparks on crash
+                if (activeMutation === 2) spawnParticles(wp.x, wp.y + 1, wp.z, 'electric', 20);
+                // Rocket mutation: explosive crash
+                if (activeMutation === 5) { spawnParticles(wp.x, wp.y, wp.z, 'fire', 20); playSound('explode'); }
+                playSound('crash');
+                crashed = true;
+              }
+              v.vel.multiplyScalar(activeMutation === 4 ? 0.95 : 0.85);
+            }
           }
         }
         // Hit NPCs
         for (const npc of npcs) {
           if (npc.state === 'ragdoll') continue;
           const d = dist2D(v.group.position.x, v.group.position.z, npc.group.position.x, npc.group.position.z);
-          if (d < 3) {
-            npcRagdoll(npc, v.vel.clone().normalize().multiplyScalar(20).add(new THREE.Vector3(0, 8, 0)));
+          if (d < collideR + 1.5) {
+            const npcForce = v.vel.clone().normalize().multiplyScalar(20 * forceMult).add(new THREE.Vector3(0, 8, 0));
+            npcRagdoll(npc, npcForce);
+            // Ice mutation: freeze NPCs on vehicle hit
+            if (activeMutation === 1) {
+              npc.frozen = true;
+              npc.group.traverse(c => { if (c.material) { c.material = c.material.clone(); c.material.color.set(0x88ccff); } });
+              spawnParticles(npc.group.position.x, 1, npc.group.position.z, 'ice', 10);
+            }
+            // Electric mutation: chain to nearby NPCs
+            if (activeMutation === 2) {
+              const chainNPCs = npcs.filter(n => n !== npc && n.state !== 'ragdoll' && dist2D(n.group.position.x, n.group.position.z, npc.group.position.x, npc.group.position.z) < 10);
+              chainNPCs.forEach(n => npcRagdoll(n, new THREE.Vector3(rand(-5,5), 8, rand(-5,5))));
+              spawnParticles(npc.group.position.x, 1, npc.group.position.z, 'electric', 15);
+            }
           }
         }
       }
 
+      // Mutation trail effects while driving
+      if (vSpeed > 1) {
+        if (activeMutation === 0) spawnParticles(v.group.position.x + rand(-1,1), 0.3, v.group.position.z + rand(-1,1), 'fire', 2);
+        if (activeMutation === 1) spawnParticles(v.group.position.x + rand(-1,1), 0.3, v.group.position.z + rand(-1,1), 'ice', 1);
+        if (activeMutation === 2 && Math.random() < dt * 8) spawnParticles(v.group.position.x + rand(-1,1), 1, v.group.position.z + rand(-1,1), 'electric', 3);
+        if (activeMutation === 5) spawnParticles(v.group.position.x, 0.5, v.group.position.z, 'fire', 3);
+      }
+
       // Boost with shift
       if (keys['ShiftLeft'] || keys['ShiftRight']) {
-        v.vel.add(forward.clone().multiplyScalar(vt.speed * 2 * dt));
+        v.vel.add(forward.clone().multiplyScalar(vt.speed * vSpeedMult * 2 * dt));
         spawnParticles(v.group.position.x, 0.3, v.group.position.z, 'smoke', 2);
       }
 
@@ -1698,6 +2077,7 @@ function updateVehicles(dt) {
         v.launched = true;
         v.mounted = false;
         mountedVehicle = null;
+        v.group.scale.set(1, 1, 1);
         v.launchVel.copy(forward.multiplyScalar(40)).add(new THREE.Vector3(0, 15, 0));
         playerPos.y = 0;
         playerVel.set(0, 3, 0);
@@ -1708,6 +2088,7 @@ function updateVehicles(dt) {
         // Dismount
         v.mounted = false;
         mountedVehicle = null;
+        v.group.scale.set(1, 1, 1);
         playerPos.copy(v.group.position).add(new THREE.Vector3(2, 0, 0));
         playerVel.set(0, 2, 0);
       }
@@ -1772,7 +2153,8 @@ function updateVehicles(dt) {
 // ===================== MUTATION ORBS =====================
 function spawnMutationOrbs() {
   for (let i = 0; i < MUTATION_ORB_COUNT; i++) {
-    const type = randInt(0, MUTATIONS.length - 1);
+    // 50% chance of Giant Goat, otherwise random
+    const type = Math.random() < 0.5 ? 4 : randInt(0, MUTATIONS.length - 1);
     const mut = MUTATIONS[type];
 
     const orb = new THREE.Group();
@@ -1853,7 +2235,7 @@ function updateMutations(dt) {
       spawnParticles(playerPos.x + rand(-1,1), playerPos.y + rand(0,2), playerPos.z + rand(-1,1), 'electric', 3);
     }
     // Rocket boost
-    if (activeMutation === 5 && (keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD'])) {
+    if (activeMutation === 5 && (keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD']||keys['ArrowUp']||keys['ArrowDown']||keys['ArrowLeft']||keys['ArrowRight'])) {
       spawnParticles(playerPos.x, playerPos.y + 0.5, playerPos.z, 'fire', 3);
       playerVel.y = Math.max(playerVel.y, 2); // slight hover
     }
