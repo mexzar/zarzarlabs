@@ -821,7 +821,7 @@ function updatePlayer(dt) {
   if (keys['KeyD'] || keys['ArrowRight']) moveDir.add(right);
 
   // Goat always faces where mouse/camera is pointing
-  playerRot = camTheta + Math.PI;
+  playerRot = camTheta;
 
   if (moveDir.lengthSq() > 0) {
     moveDir.normalize();
