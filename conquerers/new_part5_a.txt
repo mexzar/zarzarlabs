@@ -1,0 +1,205 @@
+// ===============================================
+//  PART 5: TACTICAL BATTLE SYSTEM
+// ===============================================
+
+const BATTLE_ISO_X = W / 2;
+const BATTLE_ISO_Y = 100;
+
+function toBattleIso(gx, gy) {
+  return {
+    x: (gx - gy) * (TILE_W / 2) + BATTLE_ISO_X,
+    y: (gx + gy) * (TILE_H / 2) + BATTLE_ISO_Y
+  };
+}
+function fromBattleIso(sx, sy) {
+  const rx = sx - BATTLE_ISO_X;
+  const ry = sy - BATTLE_ISO_Y;
+  const gx = (rx / (TILE_W / 2) + ry / (TILE_H / 2)) / 2;
+  const gy = (ry / (TILE_H / 2) - rx / (TILE_W / 2)) / 2;
+  return { x: Math.round(gx), y: Math.round(gy) };
+}
+
+// ===============================================
+//  enterBattle - Initialize battle from overworld encounter
+// ===============================================
+function enterBattle(arr, idx, isFort) {
+  const entity = arr[idx];
+  gameMode = 'deploy';
+  deploySelectedType = null;
+  battleParticles = [];
+  battleFloatingTexts = [];
+
+  // Generate battle grid
+  const grid = [];
+  for (let y = 0; y < BROWS; y++) {
+    grid[y] = [];
+    for (let x = 0; x < BCOLS; x++) {
+      if (x >= 3 && x < BCOLS - 3 && Math.random() < 0.1) grid[y][x] = 'wall';
+      else grid[y][x] = 'grass';
+    }
+  }
+
+  // Generate enemy units from strength
+  const eType = isFort ? 'bandit' : entity.type;
+  const eStr = isFort ? entity.str : entity.str;
+  const eStats = ENEMY_BATTLE_STATS[eType];
+  const numEnemies = Math.max(1, Math.ceil(eStr / eStats.hp));
+  const enemyUnits = [];
+  for (let i = 0; i < numEnemies; i++) {
+    const ex = BCOLS - 1 - (i % 3);
+    const ey = Math.floor(i / 3) + Math.floor((BROWS - Math.ceil(numEnemies / 3)) / 2);
+    const ey2 = Math.max(0, Math.min(BROWS - 1, ey));
+    let unitType = eType;
+    if (isFort && i > 0 && Math.random() < 0.4) unitType = 'raider';
+    if (eType === 'dark_mage' && i > 0 && Math.random() < 0.5) unitType = 'troll';
+    const stats = ENEMY_BATTLE_STATS[unitType];
+    enemyUnits.push({
+      type: unitType, hp: stats.hp, maxHp: stats.hp,
+      atk: stats.atk, range: stats.range,
+      aoe: stats.aoe, heavy: stats.heavy || false,
+      x: ex, y: ey2, vx: ex, vy: ey2,
+      moveSpeed: stats.moveSpeed, attackRate: stats.attackRate, attackCD: 0,
+    });
+  }
+  for (let i = 1; i < enemyUnits.length; i++) {
+    while (enemyUnits.some((u, j) => j < i && u.x === enemyUnits[i].x && u.y === enemyUnits[i].y)) {
+      enemyUnits[i].y = (enemyUnits[i].y + 1) % BROWS;
+    }
+    enemyUnits[i].vx = enemyUnits[i].x;
+    enemyUnits[i].vy = enemyUnits[i].y;
+  }
+
+  battle = {
+    grid,
+    playerUnits: [],
+    enemyUnits,
+    enemyContext: { type: eType, str: eStr, index: idx, isFort, arr },
+    simSpeed: 1,
+    simPaused: false,
+    frameCount: 0,
+    resultMsg: '',
+    deployArmy: {},
+  };
+  for (const t of TROOP_ORDER) battle.deployArmy[t] = Array.isArray(player.army[t]) ? player.army[t].slice() : [];
+}
+
+// ===============================================
+//  cancelDeploy
+// ===============================================
+function cancelDeploy() {
+  gameMode = 'overworld';
+  battle = null;
+  player.x = Math.max(1, player.x - player.lastDx);
+  player.y = Math.max(1, player.y - player.lastDy);
+}
+
+// ===============================================
+//  startBattle
+// ===============================================
+function startBattle() {
+  if (battle.playerUnits.length === 0) return;
+  for (const t of TROOP_ORDER) player.army[t] = Array.isArray(battle.deployArmy[t]) ? battle.deployArmy[t].slice() : [];
+  battle.deployedSnapshot = {};
+  for (const u of battle.playerUnits) {
+    if (!battle.deployedSnapshot[u.type]) battle.deployedSnapshot[u.type] = [];
+    battle.deployedSnapshot[u.type].push(u.maxHp);
+  }
+  for (const u of battle.playerUnits) {
+    const s = BATTLE_STATS[u.type];
+    u.moveSpeed = s.moveSpeed; u.attackRate = s.attackRate; u.attackCD = Math.floor(Math.random() * 20);
+    u.vx = u.x; u.vy = u.y;
+  }
+  for (const u of battle.enemyUnits) {
+    const s = ENEMY_BATTLE_STATS[u.type];
+    u.moveSpeed = s.moveSpeed; u.attackRate = s.attackRate; u.attackCD = Math.floor(Math.random() * 30);
+    u.vx = u.x; u.vy = u.y;
+  }
+  battleProjectiles = [];
+  updateHUD();
+  gameMode = 'battle';
+  battle.simSpeed = 1;
+  battle.simPaused = false;
+  battle.frameCount = 0;
+}
+
+function getEuclidDist(a, b) {
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+}
+
+// ===============================================
+//  PROJECTILE HELPERS (Medieval)
+// ===============================================
+function getProjectileType(unitType) {
+  if (unitType === 'pikemen') return 'pike_thrust';
+  if (unitType === 'knights') return 'lance_charge';
+  if (unitType === 'catapults') return 'stone';
+  if (unitType === 'firelancers') return 'fire';
+  if (unitType === 'healers') return 'heal';
+  if (unitType === 'crossbowmen') return 'bolt';
+  if (unitType === 'assassins') return 'dagger';
+  if (unitType === 'cannons') return 'cannonball';
+  if (unitType === 'menatarms') return 'melee_slash';
+  if (unitType === 'longbowmen') return 'arrow';
+  if (unitType === 'troll') return 'melee_slash';
+  if (unitType === 'dark_mage') return 'magic_bolt';
+  if (unitType === 'war_elephant') return 'elephant_charge';
+  if (unitType === 'dragon_rider') return 'dragon_fire';
+  if (unitType === 'raider') return 'axe_throw';
+  if (unitType === 'enemy_archer') return 'arrow';
+  return 'arrow';
+}
+
+function getProjectileColor(pType) {
+  if (pType === 'pike_thrust') return '#ef6c00';
+  if (pType === 'lance_charge') return '#90a4ae';
+  if (pType === 'stone') return '#8d6e63';
+  if (pType === 'fire') return '#ff9800';
+  if (pType === 'heal') return '#ffd54f';
+  if (pType === 'bolt') return '#b0bec5';
+  if (pType === 'dagger') return '#78909c';
+  if (pType === 'cannonball') return '#cd7f32';
+  if (pType === 'melee_slash') return '#e0e0e0';
+  if (pType === 'magic_bolt') return '#ce93d8';
+  if (pType === 'arrow') return '#a1887f';
+  if (pType === 'axe_throw') return '#6d4c41';
+  if (pType === 'elephant_charge') return '#8d6e63';
+  if (pType === 'dragon_fire') return '#ff5722';
+  return '#a1887f';
+}
+
+function getProjectileSpeed(pType) {
+  if (pType === 'pike_thrust') return 0.2;
+  if (pType === 'lance_charge') return 0.18;
+  if (pType === 'stone') return 0.08;
+  if (pType === 'fire') return 0.15;
+  if (pType === 'heal') return 0.15;
+  if (pType === 'bolt') return 0.18;
+  if (pType === 'dagger') return 0.16;
+  if (pType === 'cannonball') return 0.1;
+  if (pType === 'melee_slash') return 0.2;
+  if (pType === 'magic_bolt') return 0.14;
+  if (pType === 'arrow') return 0.16;
+  if (pType === 'axe_throw') return 0.12;
+  if (pType === 'elephant_charge') return 0.2;
+  if (pType === 'dragon_fire') return 0.12;
+  return 0.16;
+}
+
+function spawnProjectile(attacker, target, isPlayer) {
+  const pType = getProjectileType(attacker.type);
+  const count = pType === 'bolt' ? 3 : 1;
+  for (let i = 0; i < count; i++) {
+    battleProjectiles.push({
+      x: attacker.x, y: attacker.y,
+      tx: target.x, ty: target.y,
+      targetUnit: target,
+      speed: getProjectileSpeed(pType),
+      dmg: attacker.atk, atk: attacker.atk,
+      attackerType: attacker.type, aoe: attacker.aoe || 0,
+      isPlayer, type: pType,
+      color: getProjectileColor(pType),
+      life: 120, delay: i * 5,
+      heavy: attacker.heavy,
+    });
+  }
+}

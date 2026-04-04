@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CONQUERERS</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=MedievalSharp&display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+
+body {
+  background: linear-gradient(180deg, #0a0a1a 0%, #1a1a2e 40%, #16213e 100%);
+  color: #e0e0e0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+h1 {
+  font-family: 'MedievalSharp', cursive, serif;
+  font-size: 2.8rem;
+  margin: 10px 0 2px;
+  letter-spacing: 5px;
+  color: #f0c040;
+  text-shadow: 0 0 30px rgba(240,192,64,0.5), 0 2px 4px rgba(0,0,0,0.6);
+}
+
+#subtitle { font-size: 0.85rem; color: #8888aa; margin-bottom: 6px; letter-spacing: 2px; }
+
+#hud {
+  display: flex; gap: 10px; margin-bottom: 4px; font-size: 0.9rem;
+  flex-wrap: wrap; justify-content: center;
+}
+#hud span {
+  background: linear-gradient(180deg, #1a2744 0%, #0f1b30 100%);
+  padding: 4px 12px; border-radius: 6px; border: 1px solid #2a3a5a;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+#hud .label { color: #778; font-size: 0.8rem; }
+#hud .val { font-weight: bold; }
+#army-str .val { color: #4fc3f7; }
+#forts-left .val { color: #ff8a65; }
+#gold-num .val { color: #ffd54f; }
+#kills-num .val { color: #ef9a9a; }
+
+#message {
+  height: 22px; font-size: 0.9rem; color: #ce93d8; margin-bottom: 2px;
+  text-align: center; text-shadow: 0 0 10px rgba(206,147,216,0.3);
+}
+
+canvas {
+  border: 2px solid #2a3a5a; border-radius: 8px; cursor: pointer;
+  box-shadow: 0 4px 30px rgba(0,0,0,0.5);
+  max-width: 98vw;
+}
+
+#controls {
+  margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+}
+#controls button {
+  background: linear-gradient(180deg, #1e2d4a 0%, #121e33 100%);
+  color: #ccd; border: 1px solid #3a4a6a; padding: 5px 14px; border-radius: 6px;
+  cursor: pointer; font-size: 0.82rem; transition: all 0.2s;
+}
+#controls button:hover { background: linear-gradient(180deg, #2a3d5a 0%, #1a2a44 100%); }
+
+#shop {
+  margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+}
+#shop button {
+  background: linear-gradient(180deg, #1a2a1e 0%, #0e1a10 100%);
+  color: #81c784; border: 1px solid #2e5a32; padding: 4px 10px; border-radius: 6px;
+  cursor: pointer; font-size: 0.78rem; transition: all 0.2s;
+}
+#shop button:hover { background: linear-gradient(180deg, #2a3a2e 0%, #1a2a1e 100%); }
+#shop button:disabled { opacity: 0.35; cursor: default; }
+
+#legend {
+  margin-top: 8px; font-size: 0.72rem; color: #556; text-align: center;
+  max-width: 1100px; line-height: 1.7;
+}
+#legend b { color: #889; }
+
+#overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.82);
+  justify-content: center; align-items: center; flex-direction: column;
+  z-index: 10; backdrop-filter: blur(4px);
+}
+#overlay.show { display: flex; }
+#overlay h2 {
+  font-family: 'MedievalSharp', cursive, serif; font-size: 3rem;
+  margin-bottom: 10px; text-shadow: 0 0 40px currentColor;
+}
+#overlay p { font-size: 1rem; margin-bottom: 16px; color: #bbc; text-align: center; white-space: pre-line; }
+#overlay button {
+  background: linear-gradient(180deg, #f0c040 0%, #c89020 100%);
+  color: #1a1a2e; border: none; padding: 10px 28px; border-radius: 8px;
+  font-size: 1rem; cursor: pointer; font-weight: bold;
+  box-shadow: 0 4px 20px rgba(240,192,64,0.4); transition: transform 0.15s;
+}
+#overlay button:hover { transform: scale(1.05); }
+</style>
+</head>
+<body>
+
+<h1>CONQUERERS</h1>
+<p id="subtitle">BUILD YOUR KINGDOM & CONQUER THE REALM</p>
+
+<div id="hud">
+  <span id="player-name"><span class="val" id="nameVal" style="color:#f0c040;"></span></span>
+  <span id="army-str"><span class="label">Power </span><span class="val" id="armyVal">10</span></span>
+  <span id="forts-left"><span class="label">Castles Left </span><span class="val" id="castlesVal">0</span></span>
+  <span id="gold-num"><span class="label">Gold </span><span class="val" id="goldVal">0</span></span>
+  <span id="resource-wood"><span class="label">Wood </span><span class="val" id="woodVal" style="color:#8d6e63">0</span></span>
+  <span id="resource-stone"><span class="label">Stone </span><span class="val" id="stoneVal" style="color:#90a4ae">0</span></span>
+  <span id="resource-iron"><span class="label">Iron </span><span class="val" id="ironVal" style="color:#78909c">0</span></span>
+  <span id="resource-crops"><span class="label">Crops </span><span class="val" id="cropsVal" style="color:#66bb6a">0</span></span>
+  <span id="resource-meat"><span class="label">Meat </span><span class="val" id="meatVal" style="color:#ef5350">0</span></span>
+  <span id="pop-num"><span class="label">Pop </span><span class="val" id="popVal" style="color:#ce93d8">0</span></span>
+  <span id="kills-num"><span class="label">Kills </span><span class="val" id="killsVal">0</span></span>
+  <span id="morale-num"><span class="label">Morale </span><span class="val" id="moraleVal">0</span></span>
+  <span id="eng-num"><span class="label">Smiths </span><span class="val" id="engVal" style="color:#ff9800">0</span></span>
+  <span id="income-num"><span class="label">Income </span><span class="val" id="incomeVal" style="color:#ffd54f">none</span></span>
+</div>
+
+<div id="message">&nbsp;</div>
+
+<canvas id="game"></canvas>
+
+<div id="controls">
+  <button onclick="newGame()">Restart Game</button>
+  <button onclick="showSaveLoadUI()">Save/Load</button>
+  <button onclick="tryBuildCastle()" id="buildCastleBtn">Build Castle</button>
+  <button onclick="toggleBuildMenu()">Build (B)</button>
+  <button onclick="harvest()">Harvest (H)</button>
+  <button onclick="showSettlementInfo()">Settlement</button>
+  <button onclick="showResearchMenu()">Research</button>
+</div>
+
+<div id="shop">
+  <button onclick="shopBuy('militia')">Militia x3 (10g)</button>
+  <button onclick="shopBuy('longbowmen')">Longbowmen x2 (25g)</button>
+  <button onclick="shopBuy('crossbowmen')">Crossbowmen x1 (30g)</button>
+  <button onclick="shopBuy('menatarms')">Men-at-Arms x1 (40g)</button>
+  <button onclick="shopBuy('pikemen')">Pikemen x1 (35g)</button>
+  <button onclick="shopBuy('knights')">Knights x1 (50g)</button>
+  <button onclick="shopBuy('catapults')">Catapults x1 (50g)</button>
+  <button onclick="shopBuy('healers')">Healers x1 (45g)</button>
+  <button onclick="shopBuy('firelancers')">Fire Lancers x1 (50g)</button>
+  <button onclick="shopBuy('assassins')">Assassins x1 (55g)</button>
+  <button onclick="shopBuy('cannons')">Cannons x1 (55g)</button>
+  <button onclick="shopHealAll()">Heal All (20g)</button>
+  <button onclick="shopScout()">Scout Map (15g)</button>
+</div>
+<div id="blacksmith-shop" style="margin-top:4px; display:flex; gap:6px; flex-wrap:wrap; justify-content:center;">
+  <button onclick="engineerBuy('armorPiercing')" style="background:linear-gradient(180deg,#2a1a1a 0%,#1a0e0e 100%); color:#ff8a65; border:1px solid #5a2e2e; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:0.78rem;">Sharpened Blades Lv0 (30g)</button>
+  <button onclick="engineerBuy('extendedMag')" style="background:linear-gradient(180deg,#2a1a1a 0%,#1a0e0e 100%); color:#ff8a65; border:1px solid #5a2e2e; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:0.78rem;">Longer Bows Lv0 (40g)</button>
+  <button onclick="engineerBuy('reinforced')" style="background:linear-gradient(180deg,#2a1a1a 0%,#1a0e0e 100%); color:#ff8a65; border:1px solid #5a2e2e; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:0.78rem;">Hardened Armor Lv0 (25g)</button>
+  <button onclick="engineerBuy('explosiveRounds')" style="background:linear-gradient(180deg,#2a1a1a 0%,#1a0e0e 100%); color:#ff8a65; border:1px solid #5a2e2e; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:0.78rem;">Siege Expertise Lv0 (50g)</button>
+</div>
+
+<div id="legend">
+  <b>Arrow keys / WASD / Click</b> to move |
+  <b>Units:</b>
+  <span style="color:#78909c">Militia</span> -
+  <span style="color:#26a69a">Longbowmen</span> -
+  <span style="color:#7e57c2">Crossbowmen</span> -
+  <span style="color:#5c6bc0">Men-at-Arms</span> -
+  <span style="color:#ef6c00">Pikemen</span> -
+  <span style="color:#546e7a">Knights</span> -
+  <span style="color:#e64a19">Catapults</span> -
+  <span style="color:#66bb6a">Healers</span> -
+  <span style="color:#ff7043">Fire Lancers</span> -
+  <span style="color:#ab47bc">Assassins</span> -
+  <span style="color:#42a5f5">Cannons</span>
+</div>
+
+<div id="overlay">
+  <h2 id="overlayTitle"></h2>
+  <p id="overlayMsg"></p>
+  <input id="overlayInput" type="text" maxlength="16" placeholder="Enter your name..."
+    style="display:none; background:#1a1a2e; color:#f0c040; border:2px solid #f0c040; padding:8px 16px;
+    border-radius:8px; font-size:1.1rem; text-align:center; margin-bottom:12px; outline:none;
+    font-family:'MedievalSharp',cursive,serif; letter-spacing:2px; width:220px;">
+  <button id="overlayBtn" onclick="overlayAction()">Continue</button>
+</div>
+
+<script>
+// ===============================================
+//  CONSTANTS
+// ===============================================
+const TILE_W = 64;
+const TILE_H = 32;
+const TILE = 44;
+const CHUNK_SIZE = 16;
+const MAX_CHUNKS = 16;
+const PANEL_H = 54;
+const W = 1100;
+const H = 750;
+const WALL_HEIGHT = 18;
+const MINIMAP_SIZE = 150;
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = W;
+canvas.height = H;
+
+// Camera state (grid coords, follows player smoothly)
+let camX = 50, camY = 50;
+const CAM_SPEED = 0.12;
+
+// Minimap offscreen canvas
+const minimapCanvas = document.createElement('canvas');
+minimapCanvas.width = MINIMAP_SIZE;
+minimapCanvas.height = MINIMAP_SIZE;
+const mmCtx = minimapCanvas.getContext('2d');
+let minimapDirty = true;
+
+// ===============================================
+//  ISOMETRIC TRANSFORMS (camera-relative)
+// ===============================================
+function toIso(gx, gy) {
+  const relX = gx - camX;
+  const relY = gy - camY;
+  return {
+    x: (relX - relY) * (TILE_W / 2) + W / 2,
+    y: (relX + relY) * (TILE_H / 2) + (H - PANEL_H) / 2
+  };
+}
+function fromIso(sx, sy) {
+  const rx = sx - W / 2;
+  const ry = sy - (H - PANEL_H) / 2;
+  const relX = (rx / (TILE_W / 2) + ry / (TILE_H / 2)) / 2;
+  const relY = (ry / (TILE_H / 2) - rx / (TILE_W / 2)) / 2;
+  return { x: Math.round(relX + camX), y: Math.round(relY + camY) };
+}
+
+function updateCamera() {
+  camX += (player.x - camX) * CAM_SPEED;
+  camY += (player.y - camY) * CAM_SPEED;
+  // No COLS/ROWS clamp - infinite map
+}
+
+// Get visible tile range for viewport culling (no COLS/ROWS bounds)
+function getVisibleRange() {
+  const margin = 3;
+  const halfW = Math.ceil(W / TILE_W) + margin;
+  const halfH = Math.ceil((H - PANEL_H) / TILE_H) + margin;
+  return {
+    minX: Math.floor(camX - halfW),
+    maxX: Math.ceil(camX + halfW),
+    minY: Math.floor(camY - halfH),
+    maxY: Math.ceil(camY + halfH)
+  };
+}
+
+// ===============================================
+//  TROOP TYPE DEFINITIONS (player army)
+// ===============================================
+const TROOP_TYPES = {
+  militia:     { name:'Militia',       str:3,   color:'#78909c', dark:'#37474f', cost:10, qty:3, desc:'Basic infantry, swords' },
+  longbowmen:  { name:'Longbowmen',    str:2.5, color:'#26a69a', dark:'#00695c', cost:25, qty:2, desc:'Ranged pre-combat damage' },
+  crossbowmen: { name:'Crossbowmen',   str:4.5, color:'#7e57c2', dark:'#4527a0', cost:30, qty:1, desc:'Splash/area suppression' },
+  menatarms:   { name:'Men-at-Arms',   str:5,   color:'#5c6bc0', dark:'#283593', cost:40, qty:1, desc:'Heavy melee fighters' },
+  pikemen:     { name:'Pikemen',       str:4,   color:'#ef6c00', dark:'#bf360c', cost:35, qty:1, desc:'+60% vs heavy enemies' },
+  knights:     { name:'Knights',       str:10,  color:'#546e7a', dark:'#263238', cost:50, qty:1, desc:'Heavy cavalry, +5 armor' },
+  catapults:   { name:'Catapults',     str:12,  color:'#e64a19', dark:'#bf360c', cost:50, qty:1, desc:'Siege, massive AOE +castle bonus' },
+  healers:     { name:'Healers',       str:2,   color:'#66bb6a', dark:'#2e7d32', cost:45, qty:1, desc:'Heal allies in battle' },
+  firelancers: { name:'Fire Lancers',  str:6,   color:'#ff7043', dark:'#d84315', cost:50, qty:1, desc:'Short range massive AOE (Greek fire)' },
+  assassins:   { name:'Assassins',     str:5,   color:'#ab47bc', dark:'#6a1b9a', cost:55, qty:1, desc:'Fast stealth attacker' },
+  cannons:     { name:'Cannons',       str:9,   color:'#42a5f5', dark:'#1565c0', cost:55, qty:1, desc:'STRONGEST ranged siege weapon' },
+};
+const TROOP_ORDER = ['militia','longbowmen','crossbowmen','menatarms','pikemen','knights','catapults','healers','firelancers','assassins','cannons'];
+
+// ===============================================
+//  ENEMY TYPE DEFINITIONS
+// ===============================================
+const ENEMY_TYPES = {
+  bandit:       { name:'Bandit',        color:'#8d6e63', dark:'#4e342e', speed:2, detectRange:7, strMul:0.6,  goldMul:0.25, yields:'militia',    heavy:false },
+  raider:       { name:'Raider',        color:'#455a64', dark:'#263238', speed:2, detectRange:8, strMul:1.2,  goldMul:0.4,  yields:'militia',    heavy:false },
+  enemy_archer: { name:'Enemy Archer',  color:'#00897b', dark:'#004d40', speed:1, detectRange:9, strMul:0.9,  goldMul:0.4,  ranged:true, yields:'longbowmen', heavy:false },
+  war_elephant: { name:'War Elephant',  color:'#607d8b', dark:'#37474f', speed:1, detectRange:5, strMul:2.0,  goldMul:0.6,  yields:'menatarms', heavy:true },
+  dragon_rider: { name:'Dragon Rider',  color:'#42a5f5', dark:'#1565c0', speed:3, detectRange:10,strMul:1.8,  goldMul:0.5,  charge:true, yields:'pikemen', heavy:true },
+  dark_mage:    { name:'Dark Mage',     color:'#ab47bc', dark:'#6a1b9a', speed:1, detectRange:6, strMul:0.8,  goldMul:0.5,  yields:'assassins', heavy:false },
+  troll:        { name:'Troll',         color:'#76ff03', dark:'#33691e', speed:2, detectRange:5, strMul:1.5,  goldMul:0.35, yields:'menatarms', heavy:true },
+};
+
+// ===============================================
+//  BATTLE STATS (tactical battle system)
+// ===============================================
+const BATTLE_STATS = {
+  militia:     { hp:8,  atk:3,  range:3, moveRange:3, aoe:0, name:'Militia',      moveSpeed:0.03, attackRate:45 },
+  longbowmen:  { hp:5,  atk:5,  range:6, moveRange:2, aoe:0, name:'Longbowman',   moveSpeed:0.02, attackRate:80 },
+  crossbowmen: { hp:10, atk:4,  range:3, moveRange:2, aoe:1, name:'Crossbowman',  moveSpeed:0.02, attackRate:20 },
+  menatarms:   { hp:12, atk:5,  range:3, moveRange:2, aoe:0, name:'Man-at-Arms',  moveSpeed:0.02, attackRate:35 },
+  pikemen:     { hp:8,  atk:6,  range:4, moveRange:2, aoe:0, name:'Pikeman',      moveSpeed:0.02, attackRate:60 },
+  knights:     { hp:25, atk:8,  range:3, moveRange:2, aoe:0, name:'Knight',       moveSpeed:0.015,attackRate:50 },
+  catapults:   { hp:6,  atk:12, range:5, moveRange:3, aoe:2, name:'Catapult',     moveSpeed:0.035,attackRate:70 },
+  healers:     { hp:10, atk:1,  range:2, moveRange:3, aoe:0, name:'Healer',       moveSpeed:0.03, attackRate:50 },
+  firelancers: { hp:7,  atk:7,  range:2, moveRange:2, aoe:2, name:'Fire Lancer',  moveSpeed:0.02, attackRate:30 },
+  assassins:   { hp:6,  atk:8,  range:3, moveRange:4, aoe:0, name:'Assassin',     moveSpeed:0.04, attackRate:40 },
+  cannons:     { hp:18, atk:7,  range:4, moveRange:4, aoe:0, name:'Cannon',       moveSpeed:0.04, attackRate:50 },
+};
+
+// ===============================================
+//  ENEMY BATTLE STATS
+// ===============================================
+const ENEMY_BATTLE_STATS = {
+  bandit:       { hp:6,  atk:2, range:2, moveRange:3, aoe:0, heavy:false, moveSpeed:0.03, attackRate:45 },
+  raider:       { hp:10, atk:4, range:3, moveRange:3, aoe:0, heavy:false, moveSpeed:0.025,attackRate:40 },
+  enemy_archer: { hp:5,  atk:4, range:6, moveRange:2, aoe:0, heavy:false, moveSpeed:0.02, attackRate:70 },
+  war_elephant: { hp:30, atk:6, range:3, moveRange:2, aoe:1, heavy:true,  moveSpeed:0.015,attackRate:45 },
+  dragon_rider: { hp:20, atk:7, range:4, moveRange:4, aoe:0, heavy:true,  moveSpeed:0.04, attackRate:50 },
+  dark_mage:    { hp:8,  atk:2, range:3, moveRange:2, aoe:0, heavy:false, moveSpeed:0.015,attackRate:60 },
+  troll:        { hp:18, atk:6, range:1, moveRange:3, aoe:0, heavy:true,  moveSpeed:0.025,attackRate:40 },
+};
+
+// ===============================================
+//  UPGRADE DEFINITIONS (blacksmith upgrades)
+// ===============================================
+const UPGRADE_DEFS = {
+  armorPiercing:   { name: 'Sharpened Blades', maxLvl: 3, costs: [30, 60, 100], desc: '+1 ATK all' },
+  extendedMag:     { name: 'Longer Bows',      maxLvl: 2, costs: [40, 80],      desc: '+1 Range all' },
+  reinforced:      { name: 'Hardened Armor',    maxLvl: 3, costs: [25, 50, 85],  desc: '+3 HP all' },
+  explosiveRounds: { name: 'Siege Expertise',   maxLvl: 2, costs: [50, 90],      desc: '+1 AOE catapult/crossbow' },
+};
+
+// ===============================================
+//  FORT (CASTLE) UPGRADE DEFINITIONS
+// ===============================================
+const FORT_UPGRADE_DEFS = {
+  walls:   [{cost:80, def:2, name:'Palisade'},{cost:160, def:5, name:'Stone Ramparts'},{cost:300, def:10, name:'Fortified Keep'}],
+  turrets: [{cost:100, dmg:3, name:'Arrow Tower'},{cost:200, dmg:7, name:'Ballista Tower'},{cost:350, dmg:12, name:'Cannon Tower'}],
+  mines:   [{cost:120, income:5, name:'Tax Collector'},{cost:250, income:12, name:'Trade Post'},{cost:400, income:20, name:'Royal Treasury'}],
+};
+
+// ===============================================
+//  BUILDING DEFINITIONS (settlement buildings, 3 upgrade levels)
+// ===============================================
+const BUILDING_DEFS = {
+  house: {
+    name: 'House', category: 'infrastructure', workers: 0, requiresAdj: null,
+    levels: [
+      { cost: { wood: 10, stone: 5 }, buildTime: 3, popCap: 4 },
+      { cost: { wood: 15, stone: 10 }, buildTime: 5, popCap: 6 },
+      { cost: { wood: 25, stone: 15, iron: 5 }, buildTime: 7, popCap: 8 },
+    ]
+  },
+  farm: {
+    name: 'Farm', category: 'production', workers: 2, requiresAdj: null,
+    levels: [
+      { cost: { wood: 8, stone: 2 }, buildTime: 4, production: { crops: 3 } },
+      { cost: { wood: 12, stone: 5 }, buildTime: 6, production: { crops: 5 } },
+      { cost: { wood: 20, stone: 8, iron: 3 }, buildTime: 8, production: { crops: 8 } },
+    ]
+  },
+  lumbermill: {
+    name: 'Lumbermill', category: 'production', workers: 2, requiresAdj: 'tree',
+    levels: [
+      { cost: { wood: 5, stone: 8 }, buildTime: 5, production: { wood: 3 } },
+      { cost: { wood: 10, stone: 12 }, buildTime: 7, production: { wood: 5 } },
+      { cost: { wood: 15, stone: 18, iron: 5 }, buildTime: 9, production: { wood: 8 } },
+    ]
+  },
+  quarry: {
+    name: 'Quarry', category: 'production', workers: 3, requiresAdj: 'wall',
+    levels: [
+      { cost: { wood: 10, iron: 2 }, buildTime: 6, production: { stone: 3 } },
+      { cost: { wood: 15, iron: 5 }, buildTime: 8, production: { stone: 5 } },
+      { cost: { wood: 25, iron: 10 }, buildTime: 10, production: { stone: 8 } },
+    ]
+  },
+  mine: {
+    name: 'Mine', category: 'production', workers: 3, requiresAdj: 'wall',
+    levels: [
+      { cost: { wood: 12, stone: 10 }, buildTime: 8, production: { iron: 2 } },
+      { cost: { wood: 20, stone: 15 }, buildTime: 10, production: { iron: 4 } },
+      { cost: { wood: 30, stone: 20, gold: 5 }, buildTime: 12, production: { iron: 6 } },
+    ]
+  },
+  huntingLodge: {
+    name: 'Hunting Lodge', category: 'production', workers: 2, requiresAdj: 'tree',
+    levels: [
+      { cost: { wood: 12, stone: 3 }, buildTime: 4, production: { meat: 2 } },
+      { cost: { wood: 18, stone: 6 }, buildTime: 6, production: { meat: 4 } },
+      { cost: { wood: 25, stone: 10, iron: 3 }, buildTime: 8, production: { meat: 6 } },
+    ]
+  },
+  watchtower: {
+    name: 'Watchtower', category: 'infrastructure', workers: 1, requiresAdj: null,
+    levels: [
+      { cost: { wood: 15, stone: 10 }, buildTime: 5, visionRange: 4 },
+      { cost: { wood: 20, stone: 15, iron: 5 }, buildTime: 7, visionRange: 6 },
+      { cost: { wood: 30, stone: 20, iron: 10 }, buildTime: 9, visionRange: 8 },
+    ]
+  },
+  market: {
+    name: 'Market', category: 'economy', workers: 2, requiresAdj: null,
+    levels: [
+      { cost: { wood: 15, stone: 10, gold: 10 }, buildTime: 6, production: { gold: 2 }, tradeRatio: 4 },
+      { cost: { wood: 25, stone: 15, gold: 20 }, buildTime: 8, production: { gold: 4 }, tradeRatio: 3 },
+      { cost: { wood: 40, stone: 25, gold: 35 }, buildTime: 10, production: { gold: 6 }, tradeRatio: 2 },
+    ]
+  },
+  warehouse: {
+    name: 'Warehouse', category: 'infrastructure', workers: 0, requiresAdj: null,
+    levels: [
+      { cost: { wood: 20, stone: 15 }, buildTime: 5, storageCap: 50 },
+      { cost: { wood: 30, stone: 20, iron: 5 }, buildTime: 7, storageCap: 100 },
+      { cost: { wood: 45, stone: 30, iron: 10 }, buildTime: 9, storageCap: 200 },
+    ]
+  },
+  hospital: {
+    name: 'Hospital', category: 'infrastructure', workers: 2, requiresAdj: null,
+    levels: [
+      { cost: { wood: 15, stone: 10, crops: 5 }, buildTime: 6, healRate: 2 },
+      { cost: { wood: 25, stone: 15, crops: 10 }, buildTime: 8, healRate: 4 },
+      { cost: { wood: 40, stone: 25, crops: 15, iron: 5 }, buildTime: 10, healRate: 8 },
+    ]
+  },
+  academy: {
+    name: 'Academy', category: 'infrastructure', workers: 3, requiresAdj: null,
+    levels: [
+      { cost: { wood: 20, stone: 20, gold: 15 }, buildTime: 10, researchSpeed: 1 },
+      { cost: { wood: 35, stone: 30, gold: 25 }, buildTime: 12, researchSpeed: 1.5 },
+      { cost: { wood: 50, stone: 40, gold: 40, iron: 10 }, buildTime: 14, researchSpeed: 2 },
+    ]
+  },
+  temple: {
+    name: 'Temple', category: 'infrastructure', workers: 1, requiresAdj: null,
+    levels: [
+      { cost: { stone: 25, gold: 10 }, buildTime: 8, moraleBonus: 1 },
+      { cost: { stone: 35, gold: 20 }, buildTime: 10, moraleBonus: 2 },
+      { cost: { stone: 50, gold: 35, iron: 5 }, buildTime: 12, moraleBonus: 3 },
+    ]
+  },
+  port: {
+    name: 'Port', category: 'production', workers: 2, requiresAdj: 'water',
+    levels: [
+      { cost: { wood: 20, stone: 8 }, buildTime: 6, production: { meat: 3 } },
+      { cost: { wood: 30, stone: 15, iron: 5 }, buildTime: 8, production: { meat: 5 } },
+      { cost: { wood: 45, stone: 25, iron: 10 }, buildTime: 10, production: { meat: 8 } },
+    ]
+  },
+  blacksmith: {
+    name: 'Blacksmith', category: 'production', workers: 2, requiresAdj: null,
+    levels: [
+      { cost: { wood: 15, stone: 10, iron: 5 }, buildTime: 6, toolBonus: 1 },
+      { cost: { wood: 25, stone: 18, iron: 12 }, buildTime: 8, toolBonus: 2 },
+      { cost: { wood: 40, stone: 28, iron: 20 }, buildTime: 10, toolBonus: 3 },
+    ]
+  },
+};
+
+// ===============================================
+//  RESOURCE DEFINITIONS
+// ===============================================
+const RESOURCES = ['wood', 'stone', 'iron', 'gold', 'meat', 'crops'];
+const RESOURCE_DEFS = {
+  wood:  { name: 'Wood',  color: '#8d6e63', icon: 'W' },
+  stone: { name: 'Stone', color: '#90a4ae', icon: 'S' },
+  iron:  { name: 'Iron',  color: '#78909c', icon: 'I' },
+  gold:  { name: 'Gold',  color: '#ffd54f', icon: 'G' },
+  meat:  { name: 'Meat',  color: '#ef5350', icon: 'M' },
+  crops: { name: 'Crops', color: '#66bb6a', icon: 'C' },
+};
+
+// ===============================================
+//  TECH TREE
+// ===============================================
+const TECH_TREE = {
+  improvedTools:   { name: 'Improved Tools',   cost: { gold: 20, iron: 10 },  time: 15, effect: 'production_boost', value: 0.25, requires: [] },
+  stoneMasonry:    { name: 'Stone Masonry',     cost: { gold: 15, stone: 15 }, time: 12, effect: 'wall_hp_boost', value: 2, requires: [] },
+  ironWorking:     { name: 'Iron Working',      cost: { gold: 25, iron: 15 },  time: 20, effect: 'mine_boost', value: 0.5, requires: [] },
+  advancedFarming: { name: 'Advanced Farming',  cost: { gold: 20, crops: 10 }, time: 15, effect: 'farm_boost', value: 2, requires: ['improvedTools'] },
+  economics:       { name: 'Economics',         cost: { gold: 35 },            time: 20, effect: 'market_boost', value: 1, requires: [] },
+  medicine:        { name: 'Medicine',          cost: { gold: 30, crops: 15 }, time: 18, effect: 'heal_boost', value: 2, requires: ['advancedFarming'] },
+};
+
+// ===============================================
+//  GAME STATE
+// ===============================================
+let player, enemies, forts, allies, chests, walls, gold, scouted, kills, mercCamps;
+let playerName = '';
+let particles = [], floatingTexts = [], ambientParticles = [];
+let turnCount = 0, animFrame = 0, shake = 0, tensionTimer = 0;
+let morale = 0;
+let upgrades = { armorPiercing: 0, extendedMag: 0, reinforced: 0, explosiveRounds: 0 };
+let followerTrail = [];
+let overworldEngineers = [];
+let recruitedEngineers = 0, engineerATKBonus = 0, engineerTimer = 0;
+let playerForts = [];
+let territoryMap = {};  // sparse: "x,y" -> 'player'|'enemy'
+let pendingAttacks = [];
+let goldPerTurn = 0;
+let fortMenuOpen = false, fortMenuIndex = -1;
+
+// Merged settlement state as globals
+let resources = { wood: 30, stone: 20, iron: 0, gold: 0, meat: 5, crops: 10 };
+let storageCap = { wood: 100, stone: 100, iron: 50, gold: 200, meat: 50, crops: 80 };
+let population = 4, popCap = 4, idleWorkers = 4;
+let buildings = [], nextBuildingId = 1;
+let researched = {}, currentResearch = null;
+let notifications = [];
+let buildMode = false, buildSelected = null, buildGhost = null;
+let chunks = {};  // "cx,cy" -> { generated, cx, cy }
+
+// Map data - 2D arrays lazily filled [y][x]
+let grassMap = [], treeMap = [], waterMap = [], pathMap = [], fogMap = [];
+
+// ===============================================
+//  SMOOTH ANIMATION STATE
+// ===============================================
+const MOVE_SPEED = 0.18;
+let moveQueue = [], isAnimating = false;
+let playerVisual = { x: 1, y: 1 };
+
+// ===============================================
+//  GAME MODE & TACTICAL BATTLE STATE
+// ===============================================
+let gameMode = 'overworld'; // 'overworld' | 'deploy' | 'battle' | 'battle_result'
+
+const BCOLS = 12, BROWS = 8;
+let battle = null;
+let battleParticles = [], battleFloatingTexts = [], battleProjectiles = [];
+let deploySelectedType = null;
+let followerVisuals = [];
+
+// ===============================================
+//  BATTLE ISOMETRIC TRANSFORMS
+// ===============================================
+const BATTLE_ISO_X = W / 2;
+const BATTLE_ISO_Y = 100;
+
+function toBattleIso(gx, gy) {
+  return {
+    x: (gx - gy) * (TILE_W / 2) + BATTLE_ISO_X,
+    y: (gx + gy) * (TILE_H / 2) + BATTLE_ISO_Y
+  };
+}
+function fromBattleIso(sx, sy) {
+  const rx = sx - BATTLE_ISO_X;
+  const ry = sy - BATTLE_ISO_Y;
+  const gx = (rx / (TILE_W / 2) + ry / (TILE_H / 2)) / 2;
+  const gy = (ry / (TILE_H / 2) - rx / (TILE_W / 2)) / 2;
+  return { x: Math.round(gx), y: Math.round(gy) };
+}
+
+// ===============================================
+//  END OF DECLARATIONS (part 1)
+//  Functions begin in part 2...
+// ===============================================

@@ -1,0 +1,231 @@
+// ===============================================
+//  REAL-TIME BATTLE AI
+// ===============================================
+function updateRealTimeBattle() {
+  if (!battle || battle.simPaused || gameMode !== 'battle') return;
+  const speedMul = battle.simSpeed;
+  battle.frameCount = (battle.frameCount || 0) + 1;
+
+  const allUnits = battle.playerUnits.concat(battle.enemyUnits);
+
+  // Process burning DOT every ~60 frames (Greek fire damage over time)
+  if (battle.frameCount % 60 === 0) {
+    for (const u of allUnits) {
+      if (u.hp <= 0 || !u.burning || u.burning <= 0) continue;
+      u.hp -= 2;
+      u.burning--;
+      const biso = toBattleIso(u.x, u.y);
+      for (let i = 0; i < 4; i++) {
+        battleParticles.push({ x: biso.x + (Math.random()-0.5)*8, y: biso.y - 10 + (Math.random()-0.5)*6, vx: (Math.random()-0.5)*1.5, vy: -1.5 - Math.random(), life: 18, maxLife: 18, color: i < 2 ? '#ff9800' : '#ffeb3b', size: 2 + Math.random() });
+      }
+      battleFloatingTexts.push({ x: biso.x, y: biso.y - 28, text: '-2 BURN', color: '#ff9800', life: 40 });
+      if (u.hp <= 0) {
+        battle.enemyUnits = battle.enemyUnits.filter(x => x.hp > 0);
+        battle.playerUnits = battle.playerUnits.filter(x => x.hp > 0);
+        if (battle.enemyUnits.length === 0) { battleVictory(); return; }
+        if (battle.playerUnits.length === 0) { battleDefeat(); return; }
+      }
+    }
+  }
+
+  // Tower bonus damage every ~120 frames (castle arrow towers)
+  if (battle.turretBonus && battle.frameCount % 120 === 0 && battle.enemyUnits.length > 0) {
+    const target = battle.enemyUnits[randInt(0, battle.enemyUnits.length - 1)];
+    if (target && target.hp > 0) {
+      target.hp -= battle.turretBonus;
+      const tiso = toBattleIso(target.x, target.y);
+      battleFloatingTexts.push({ x: tiso.x, y: tiso.y - 28, text: '-' + battle.turretBonus + ' TOWER', color: '#90a4ae', life: 40 });
+      for (let i = 0; i < 6; i++) {
+        battleParticles.push({ x: tiso.x + (Math.random()-0.5)*12, y: tiso.y - 10 + (Math.random()-0.5)*8, vx: (Math.random()-0.5)*2, vy: -2 - Math.random(), life: 15, maxLife: 15, color: '#b0bec5', size: 2 });
+      }
+      if (target.hp <= 0) {
+        battle.enemyUnits = battle.enemyUnits.filter(x => x.hp > 0);
+        if (battle.enemyUnits.length === 0) { battleVictory(); return; }
+      }
+    }
+  }
+
+  // Dark mages summon trolls every ~180 frames in battle
+  if (battle.frameCount % 180 === 0) {
+    for (const u of battle.enemyUnits) {
+      if (u.hp <= 0 || u.type !== 'dark_mage') continue;
+      if (!u.summonCount) u.summonCount = 0;
+      if (u.summonCount >= 3) continue;
+      const ms = ENEMY_BATTLE_STATS.troll;
+      battle.enemyUnits.push({
+        type: 'troll', hp: ms.hp, maxHp: ms.hp, atk: ms.atk, range: ms.range,
+        aoe: ms.aoe, heavy: ms.heavy, x: u.x + (Math.random()-0.5)*0.5, y: u.y + (Math.random()-0.5)*0.5,
+        vx: u.x, vy: u.y, moveSpeed: ms.moveSpeed, attackRate: ms.attackRate, attackCD: 20,
+      });
+      u.summonCount++;
+      const siso = toBattleIso(u.x, u.y);
+      for (let i = 0; i < 8; i++) battleParticles.push({ x: siso.x, y: siso.y - 8, vx: (Math.random()-0.5)*3, vy: -Math.random()*2-1, life: 25, maxLife: 25, color: '#ce93d8', size: 2.5 });
+      battleFloatingTexts.push({ x: siso.x, y: siso.y - 30, text: 'SUMMON!', color: '#ce93d8', life: 50 });
+    }
+  }
+
+  for (const u of allUnits) {
+    if (u.hp <= 0) continue;
+    if (u.attackCD > 0) u.attackCD -= speedMul;
+    const isPlayer = battle.playerUnits.includes(u);
+    const enemies = isPlayer ? battle.enemyUnits : battle.playerUnits;
+    const allies = isPlayer ? battle.playerUnits : battle.enemyUnits;
+
+    // Healers: heal allies (golden sparkle)
+    if (u.type === 'healers') {
+      let healTarget = null, lowestFrac = 1;
+      for (const a of allies) {
+        if (a === u || a.hp <= 0) continue;
+        const f = a.hp / a.maxHp;
+        if (f < lowestFrac) { lowestFrac = f; healTarget = a; }
+      }
+      if (healTarget && lowestFrac < 0.9) {
+        const d = getEuclidDist(u, healTarget);
+        if (d <= u.range && u.attackCD <= 0) {
+          const healAmt = 4;
+          healTarget.hp = Math.min(healTarget.maxHp, healTarget.hp + healAmt);
+          const hIso = toBattleIso(healTarget.x, healTarget.y);
+          for (let i = 0; i < 4; i++) battleParticles.push({ x: hIso.x, y: hIso.y - 10, vx: (Math.random()-0.5)*2, vy: -1-Math.random()*2, life: 20, maxLife: 20, color: '#ffd54f', size: 2 });
+          battleFloatingTexts.push({ x: hIso.x, y: hIso.y - 20, text: '+' + healAmt, color: '#ffd54f', life: 40 });
+          u.attackCD = u.attackRate;
+        } else if (d > u.range) {
+          moveToward(u, healTarget, speedMul, allies);
+        }
+      }
+      continue;
+    }
+
+    // Find target
+    let target = null;
+    if (isPlayer) {
+      // Smart targeting
+      let bestScore = 999;
+      for (const e of enemies) {
+        if (e.hp <= 0) continue;
+        let score = getEuclidDist(u, e);
+        if (u.type === 'pikemen' && e.heavy) score -= 8;
+        if (e.hp < e.maxHp) score -= 2;
+        if (e.hp <= u.atk) score -= 1.5;
+        if (score < bestScore) { bestScore = score; target = e; }
+      }
+    } else {
+      // Enemy: nearest
+      let nearDist = 999;
+      for (const p of enemies) {
+        if (p.hp <= 0) continue;
+        const d = getEuclidDist(u, p);
+        if (d < nearDist) { nearDist = d; target = p; }
+      }
+    }
+    if (!target) continue;
+
+    const dist = getEuclidDist(u, target);
+    // Ranged units stop at range, melee close in
+    const idealRange = (u.type === 'longbowmen' || u.type === 'catapults' || u.type === 'enemy_archer') ? u.range * 0.8 : u.range * 0.7;
+
+    if (dist <= u.range && u.attackCD <= 0) {
+      spawnProjectile(u, target, isPlayer);
+      u.attackCD = u.attackRate;
+    } else if (dist > idealRange) {
+      moveToward(u, target, speedMul, allies);
+    }
+  }
+}
+
+function moveToward(u, target, speedMul, allies) {
+  const dx = target.x - u.x, dy = target.y - u.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 0.05) return;
+  let mx = (dx / dist) * u.moveSpeed * speedMul;
+  let my = (dy / dist) * u.moveSpeed * speedMul;
+  for (const a of allies) {
+    if (a === u || a.hp <= 0) continue;
+    const sd = getEuclidDist(u, a);
+    if (sd < 0.6) {
+      const sep = 0.005 / Math.max(0.1, sd);
+      mx += (u.x - a.x) * sep;
+      my += (u.y - a.y) * sep;
+    }
+  }
+  u.x = Math.max(0.2, Math.min(BCOLS - 0.2, u.x + mx));
+  u.y = Math.max(0.2, Math.min(BROWS - 0.2, u.y + my));
+}
+
+// ===============================================
+//  PROJECTILE UPDATE
+// ===============================================
+function updateProjectiles() {
+  for (let i = battleProjectiles.length - 1; i >= 0; i--) {
+    const p = battleProjectiles[i];
+    if (p.delay > 0) { p.delay--; continue; }
+    const t = p.targetUnit;
+    if (t && t.hp > 0) { p.tx = t.x; p.ty = t.y; }
+    const dx = p.tx - p.x, dy = p.ty - p.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 0.15 || p.life <= 0) {
+      if (t && t.hp > 0) battleProjectileHit(p);
+      battleProjectiles.splice(i, 1);
+      continue;
+    }
+    p.x += (dx / dist) * p.speed * battle.simSpeed;
+    p.y += (dy / dist) * p.speed * battle.simSpeed;
+    p.life--;
+    // Trail particles for fire, stones, cannonballs, dragon fire
+    if (p.type === 'fire' || p.type === 'dragon_fire') {
+      const iso = toBattleIso(p.x, p.y);
+      battleParticles.push({ x: iso.x, y: iso.y - 8, vx: (Math.random()-0.5)*1, vy: -0.5, life: 10, maxLife: 10, color: p.color, size: 1.5 });
+    }
+    if (p.type === 'cannonball') {
+      const iso = toBattleIso(p.x, p.y);
+      battleParticles.push({ x: iso.x, y: iso.y - 8, vx: (Math.random()-0.5)*0.5, vy: -0.3, life: 8, maxLife: 8, color: '#888', size: 1 });
+    }
+    if (p.type === 'stone') {
+      const iso = toBattleIso(p.x, p.y);
+      if (Math.random() < 0.3) battleParticles.push({ x: iso.x, y: iso.y - 8, vx: (Math.random()-0.5)*0.5, vy: -0.2, life: 6, maxLife: 6, color: '#8d6e63', size: 1 });
+    }
+  }
+}
+
+function battleProjectileHit(proj) {
+  const defender = proj.targetUnit;
+  const isPlayerUnit = proj.isPlayer;
+
+  let dmg = proj.dmg;
+  if (proj.attackerType === 'pikemen' && defender.heavy) dmg = Math.ceil(dmg * 1.6);
+  if (defender.type === 'knights') dmg = Math.max(1, dmg - 5);
+  if (isPlayerUnit && morale !== 0) dmg = Math.max(1, Math.ceil(dmg * (1 + morale * 0.08)));
+  dmg = Math.ceil(dmg * (0.8 + Math.random() * 0.4));
+  if (proj.type === 'bolt') dmg = Math.ceil(dmg * 0.4);
+  defender.hp -= dmg;
+
+  const diso = toBattleIso(defender.x, defender.y);
+  for (let i = 0; i < 5; i++) {
+    battleParticles.push({ x: diso.x, y: diso.y - 10, vx: (Math.random()-0.5)*3, vy: -Math.random()*3-1, life: 20, maxLife: 20, color: defender.hp <= 0 ? '#ff4444' : '#ffaa44', size: 2 + Math.random()*2 });
+  }
+  battleFloatingTexts.push({ x: diso.x, y: diso.y - 25, text: '-' + dmg, color: '#ff4444', life: 50 });
+
+  // Greek fire burn DOT
+  if (proj.type === 'fire' && defender.hp > 0) {
+    defender.burning = 3;
+  }
+
+  // AOE splash (catapults, crossbowmen, firelancers siege stones)
+  if (proj.aoe > 0) {
+    const targets = isPlayerUnit ? battle.enemyUnits : battle.playerUnits;
+    for (const t of targets) {
+      if (t === defender || t.hp <= 0) continue;
+      if (getEuclidDist(t, defender) <= proj.aoe) {
+        let splashDmg = Math.ceil(dmg * 0.5);
+        t.hp -= splashDmg;
+        const tiso = toBattleIso(t.x, t.y);
+        battleFloatingTexts.push({ x: tiso.x, y: tiso.y - 25, text: '-' + splashDmg, color: '#ffaa00', life: 40 });
+      }
+    }
+  }
+
+  // Check for deaths
+  battle.enemyUnits = battle.enemyUnits.filter(u => u.hp > 0);
+  battle.playerUnits = battle.playerUnits.filter(u => u.hp > 0);
+  if (battle.enemyUnits.length === 0) { battleVictory(); return; }
+  if (battle.playerUnits.length === 0) { battleDefeat(); return; }
+}

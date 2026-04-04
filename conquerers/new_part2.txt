@@ -1,0 +1,558 @@
+// ===============================================
+//  PART 2: CORE GAME FUNCTIONS
+// ===============================================
+
+// -----------------------------------------------
+//  UTILITY HELPERS
+// -----------------------------------------------
+function k(x, y) { return x + ',' + y; }
+function randInt(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function dist(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
+
+function freeSpot() {
+  // Find free spot near player in loaded chunks
+  for (let i = 0; i < 500; i++) {
+    const x = player.x + randInt(-20, 20), y = player.y + randInt(-20, 20);
+    if (x < 0 || y < 0) continue;
+    if (walls.has(k(x, y))) continue;
+    if (waterMap[y] && waterMap[y][x]) continue;
+    if (player && x === player.x && y === player.y) continue;
+    if (enemies.some(e => e.x === x && e.y === y)) continue;
+    if (forts.some(f => f.x === x && f.y === y)) continue;
+    if (playerForts.some(f => f.gx === x && f.gy === y)) continue;
+    if (allies.some(a => a.x === x && a.y === y)) continue;
+    if (chests.some(c => c.x === x && c.y === y)) continue;
+    return { x, y };
+  }
+  return { x: player.x + 5, y: player.y + 5 };
+}
+
+function freeSpotNear(nearX, nearY, radius) {
+  for (let i = 0; i < 200; i++) {
+    const x = nearX + randInt(-radius, radius), y = nearY + randInt(-radius, radius);
+    if (x < 0 || y < 0) continue;
+    if (walls.has(k(x, y))) continue;
+    if (waterMap[y] && waterMap[y][x]) continue;
+    if (player && x === player.x && y === player.y) continue;
+    if (enemies.some(e => e.x === x && e.y === y)) continue;
+    if (forts.some(f => f.x === x && f.y === y)) continue;
+    if (playerForts.some(f => f.gx === x && f.gy === y)) continue;
+    return { x, y };
+  }
+  return null;
+}
+
+function revealAround(cx, cy, r) {
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy > r * r) continue;
+      const nx = cx + dx, ny = cy + dy;
+      if (nx >= 0 && ny >= 0 && fogMap[ny] && fogMap[ny][nx] !== undefined) {
+        fogMap[ny][nx] = 2;
+      }
+    }
+  }
+  minimapDirty = true;
+}
+
+function dimFog() {
+  // Only dim tiles in loaded chunks around player
+  const range = 30;
+  for (let dy = -range; dy <= range; dy++) {
+    for (let dx = -range; dx <= range; dx++) {
+      const x = player.x + dx, y = player.y + dy;
+      if (x >= 0 && y >= 0 && fogMap[y] && fogMap[y][x] === 2) fogMap[y][x] = 1;
+    }
+  }
+  revealAround(player.x, player.y, 5);
+  for (const pf of playerForts) revealAround(pf.gx, pf.gy, 3 + (pf.walls || 0));
+  // Watchtowers reveal
+  for (const bld of buildings) {
+    if (bld.type === 'watchtower' && bld.built) {
+      const def = BUILDING_DEFS.watchtower.levels[bld.level];
+      revealAround(bld.gx, bld.gy, def.visionRange || 4);
+    }
+  }
+}
+
+function msg(t) { document.getElementById('message').textContent = t; }
+
+// -----------------------------------------------
+//  ARMY HELPERS
+// -----------------------------------------------
+function newArmy() {
+  const a = {};
+  for (const t of TROOP_ORDER) a[t] = [];
+  return a;
+}
+
+function armyCount(army, type) {
+  const v = army[type];
+  if (Array.isArray(v)) return v.length;
+  return v || 0;
+}
+
+function armyTotal(army) {
+  let n = 0;
+  for (const t of TROOP_ORDER) n += armyCount(army, t);
+  return n;
+}
+
+function armyPower(army) {
+  let p = 0;
+  for (const t of TROOP_ORDER) p += armyCount(army, t) * TROOP_TYPES[t].str;
+  return Math.ceil(p);
+}
+
+function armyBonus(army) {
+  return armyCount(army, 'knights') * 5;
+}
+
+function effectivePower(army, enemyStr, enemyType) {
+  let p = armyPower(army);
+  p += armyBonus(army);
+  // Pikemen bonus vs heavy enemies
+  if (enemyType && ENEMY_TYPES[enemyType] && ENEMY_TYPES[enemyType].heavy) {
+    p += armyCount(army, 'pikemen') * TROOP_TYPES['pikemen'].str * 0.6;
+  }
+  // Morale bonus
+  if (morale > 0) p = Math.ceil(p * (1 + morale * 0.05));
+  // Engineer ATK bonus
+  p += engineerATKBonus;
+  return Math.ceil(p);
+}
+
+function archerPreDamage(army) {
+  // Longbowmen and catapults deal pre-combat ranged damage
+  let dmg = 0;
+  dmg += armyCount(army, 'longbowmen') * 3;
+  dmg += armyCount(army, 'catapults') * 5;
+  return dmg;
+}
+
+function loseTroops(army, losses) {
+  let remaining = losses;
+  // Lose weakest first
+  for (let i = TROOP_ORDER.length - 1; i >= 0 && remaining > 0; i--) {
+    const t = TROOP_ORDER[i];
+    if (t === 'knights') continue; // knights last
+    if (Array.isArray(army[t])) {
+      while (army[t].length > 0 && remaining > 0) {
+        army[t].pop();
+        remaining--;
+      }
+    }
+  }
+  // Knights last
+  if (remaining > 0 && Array.isArray(army['knights'])) {
+    while (army['knights'].length > 0 && remaining > 0) {
+      army['knights'].pop();
+      remaining--;
+    }
+  }
+}
+
+function addTroops(army, type, count) {
+  if (!army[type]) army[type] = [];
+  if (!Array.isArray(army[type])) army[type] = [];
+  for (let i = 0; i < count; i++) {
+    const bs = BATTLE_STATS[type];
+    army[type].push({
+      hp: bs ? bs.hp : 8,
+      maxHp: bs ? bs.hp : 8,
+      type: type
+    });
+  }
+}
+
+function armySummary(army) {
+  const parts = [];
+  for (const t of TROOP_ORDER) {
+    const c = armyCount(army, t);
+    if (c > 0) parts.push(c + ' ' + TROOP_TYPES[t].name);
+  }
+  return parts.join(', ') || 'None';
+}
+
+// -----------------------------------------------
+//  CHUNK NOISE AND CHUNK SYSTEM
+// -----------------------------------------------
+function noise(x, y) {
+  let n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+  return n - Math.floor(n);
+}
+
+function getChunkKey(cx, cy) { return cx + ',' + cy; }
+
+function ensureChunk(cx, cy) {
+  const ckey = getChunkKey(cx, cy);
+  if (chunks[ckey]) return;
+  const baseX = cx * CHUNK_SIZE;
+  const baseY = cy * CHUNK_SIZE;
+  for (let y = baseY; y < baseY + CHUNK_SIZE; y++) {
+    if (!grassMap[y]) grassMap[y] = [];
+    if (!treeMap[y]) treeMap[y] = [];
+    if (!waterMap[y]) waterMap[y] = [];
+    if (!pathMap[y]) pathMap[y] = [];
+    if (!fogMap[y]) fogMap[y] = [];
+    for (let x = baseX; x < baseX + CHUNK_SIZE; x++) {
+      const seed = noise(x, y);
+      grassMap[y][x] = seed;
+      treeMap[y][x] = seed > 0.55 && seed < 0.8;
+      waterMap[y][x] = seed > 0.93;
+      fogMap[y][x] = 0;
+      pathMap[y][x] = false;
+      if (seed > 0.88 && seed <= 0.93) walls.add(k(x, y));
+    }
+  }
+  // Spawn enemies and castles in new chunks (not near home)
+  const home = playerForts.find(f => f.isHome);
+  const homeDist = home ? Math.abs(baseX + 8 - home.gx) + Math.abs(baseY + 8 - home.gy) : 999;
+  if (homeDist > 20) {
+    const regionDiff = 1 + Math.floor(homeDist / 15);
+    // Enemy castle in ~30% of distant chunks
+    if (noise(cx * 100, cy * 100) < 0.3) {
+      const fx = baseX + 4 + Math.floor(noise(cx * 7, cy * 13) * 8);
+      const fy = baseY + 4 + Math.floor(noise(cx * 13, cy * 7) * 8);
+      if (!walls.has(k(fx, fy)) && !(waterMap[fy] && waterMap[fy][fx])) {
+        forts.push({ x: fx, y: fy, str: 15 + regionDiff * 8 + Math.floor(noise(fx, fy) * regionDiff * 4), garrisoned: false });
+        for (let dy2 = -1; dy2 <= 1; dy2++) {
+          for (let dx2 = -1; dx2 <= 1; dx2++) {
+            walls.delete(k(fx + dx2, fy + dy2));
+            if (treeMap[fy + dy2]) treeMap[fy + dy2][fx + dx2] = false;
+          }
+        }
+      }
+    }
+    // 3-6 enemies per chunk
+    const eCount = 3 + Math.floor(noise(cx * 31, cy * 37) * 4);
+    for (let i = 0; i < eCount; i++) {
+      const ex = baseX + Math.floor(noise(cx * 51 + i, cy * 61 + i) * CHUNK_SIZE);
+      const ey = baseY + Math.floor(noise(cx * 71 + i, cy * 81 + i) * CHUNK_SIZE);
+      if (walls.has(k(ex, ey)) || (waterMap[ey] && waterMap[ey][ex])) continue;
+      const type = pickEnemyType(regionDiff);
+      const def = ENEMY_TYPES[type];
+      enemies.push({ x: ex, y: ey, str: Math.ceil((4 + Math.floor(noise(ex, ey) * regionDiff * 4)) * def.strMul), type, patrol: 0, charged: false, arrowCooldown: 0, vx: ex, vy: ey });
+    }
+    // Chests
+    if (noise(cx * 41, cy * 43) < 0.5) {
+      const chx = baseX + Math.floor(noise(cx * 91, cy * 93) * CHUNK_SIZE);
+      const chy = baseY + Math.floor(noise(cx * 97, cy * 99) * CHUNK_SIZE);
+      if (!walls.has(k(chx, chy))) chests.push({ x: chx, y: chy, gold: 10 + Math.floor(noise(chx, chy) * 16) });
+    }
+    // Allies
+    if (noise(cx * 53, cy * 57) < 0.25) {
+      const ax = baseX + Math.floor(noise(cx * 61, cy * 67) * CHUNK_SIZE);
+      const ay = baseY + Math.floor(noise(cx * 73, cy * 79) * CHUNK_SIZE);
+      if (!walls.has(k(ax, ay))) {
+        const pool = ['militia', 'militia', 'longbowmen', 'crossbowmen', 'menatarms', 'pikemen', 'healers', 'knights', 'firelancers', 'catapults', 'assassins'];
+        const aType = pool[Math.floor(noise(ax, ay) * pool.length)];
+        const count = aType === 'militia' ? 2 + Math.floor(noise(ax + 1, ay) * 4) : 1 + Math.floor(noise(ax, ay + 1) * 2);
+        allies.push({ x: ax, y: ay, troopType: aType, count });
+      }
+    }
+    // Mercenary camps
+    if (noise(cx * 83, cy * 87) < 0.2) {
+      const mx2 = baseX + Math.floor(noise(cx * 101, cy * 103) * CHUNK_SIZE);
+      const my2 = baseY + Math.floor(noise(cx * 107, cy * 109) * CHUNK_SIZE);
+      if (!walls.has(k(mx2, my2))) {
+        const pool = ['militia', 'healers', 'firelancers', 'longbowmen', 'assassins', 'menatarms', 'pikemen', 'knights'];
+        const mType = pool[Math.floor(noise(mx2, my2) * pool.length)];
+        const mCount = 1 + Math.floor(noise(mx2 + 1, my2) * 2);
+        const mCost = Math.ceil(TROOP_TYPES[mType].cost * mCount * 0.7);
+        mercCamps.push({ x: mx2, y: my2, troopType: mType, count: mCount, cost: mCost });
+      }
+    }
+    // Overworld engineers (smiths)
+    if (noise(cx * 113, cy * 117) < 0.15) {
+      const sx2 = baseX + Math.floor(noise(cx * 121, cy * 127) * CHUNK_SIZE);
+      const sy2 = baseY + Math.floor(noise(cx * 131, cy * 137) * CHUNK_SIZE);
+      if (!walls.has(k(sx2, sy2))) overworldEngineers.push({ x: sx2, y: sy2 });
+    }
+  }
+  chunks[ckey] = { generated: true, cx, cy };
+}
+
+function expandMapIfNeeded(px, py) {
+  const cx = Math.floor(px / CHUNK_SIZE);
+  const cy = Math.floor(py / CHUNK_SIZE);
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const ncx = cx + dx, ncy = cy + dy;
+      if (ncx >= 0 && ncy >= 0 && ncx < MAX_CHUNKS && ncy < MAX_CHUNKS) {
+        ensureChunk(ncx, ncy);
+      }
+    }
+  }
+}
+
+// -----------------------------------------------
+//  ENEMY TYPE PICKER
+// -----------------------------------------------
+function pickEnemyType(diff) {
+  const d = diff || getDifficulty();
+  const pool = ['bandit', 'bandit'];
+  if (d >= 2) pool.push('raider', 'enemy_archer');
+  if (d >= 3) pool.push('raider', 'war_elephant', 'dark_mage');
+  if (d >= 4) pool.push('dragon_rider', 'war_elephant', 'enemy_archer');
+  if (d >= 5) pool.push('dragon_rider', 'dragon_rider', 'war_elephant');
+  return pool[randInt(0, pool.length - 1)];
+}
+
+// -----------------------------------------------
+//  GAME INIT
+// -----------------------------------------------
+function newGame() {
+  gold = 0; kills = 0; morale = 0;
+  upgrades = { armorPiercing: 0, extendedMag: 0, reinforced: 0, explosiveRounds: 0 };
+  recruitedEngineers = 0; engineerATKBonus = 0; engineerTimer = 0;
+  playerForts = []; pendingAttacks = []; goldPerTurn = 0;
+  fortMenuOpen = false; fortMenuIndex = -1;
+  // Settlers state init
+  resources = { wood: 30, stone: 20, iron: 0, gold: 0, meat: 5, crops: 10 };
+  storageCap = { wood: 100, stone: 100, iron: 50, gold: 200, meat: 50, crops: 80 };
+  population = 4; popCap = 4; idleWorkers = 4;
+  buildings = []; nextBuildingId = 1;
+  researched = {}; currentResearch = null;
+  notifications = [];
+  buildMode = false; buildSelected = null; buildGhost = null;
+  chunks = {};
+
+  const army = newArmy();
+  addTroops(army, 'militia', 5);
+  addTroops(army, 'menatarms', 3);
+  if (!playerName) {
+    showOverlay('CONQUERERS', 'Enter your name, Lord.', 'Start Game', () => {
+      initWorld(army);
+    }, true);
+  } else {
+    initWorld(army);
+  }
+}
+
+function getDifficulty() { return Math.max(1, playerForts.length); }
+
+function getRegionalDifficulty(gx, gy) {
+  const home = playerForts.find(f => f.isHome);
+  if (!home) return getDifficulty();
+  const d = Math.abs(gx - home.gx) + Math.abs(gy - home.gy);
+  return getDifficulty() + Math.floor(d / 15);
+}
+
+function initWorld(startArmy, isLoad) {
+  // Center of map at chunk 8,8 = tile 128,128
+  const startX = 128, startY = 128;
+  player = { x: startX, y: startY, army: {}, lastDx: 1, lastDy: 0 };
+  for (const t of TROOP_ORDER) player.army[t] = Array.isArray(startArmy[t]) ? startArmy[t].slice() : [];
+
+  if (!isLoad) {
+    enemies = []; forts = []; allies = []; chests = []; mercCamps = []; overworldEngineers = [];
+    walls = new Set();
+    grassMap = []; treeMap = []; waterMap = []; pathMap = []; fogMap = [];
+    territoryMap = {};
+  }
+  scouted = false;
+  particles = []; floatingTexts = [];
+  if (!isLoad) turnCount = 0;
+
+  ambientParticles = [];
+  tensionTimer = 0;
+  followerTrail = [];
+  moveQueue = [];
+  isAnimating = false;
+  playerVisual = { x: player.x, y: player.y };
+  followerVisuals = [];
+
+  // Seed ambient particles
+  for (let i = 0; i < 30; i++) {
+    ambientParticles.push({
+      x: Math.random() * W, y: Math.random() * (H - PANEL_H),
+      vx: (Math.random() - 0.5) * 0.3, vy: -0.1 - Math.random() * 0.2,
+      size: 1 + Math.random() * 1.5, alpha: 0.2 + Math.random() * 0.3,
+      life: 200 + randInt(0, 200), maxLife: 400,
+    });
+  }
+
+  if (!isLoad) {
+    // Generate initial chunks around player
+    expandMapIfNeeded(player.x, player.y);
+    // Clear area around spawn
+    for (let dy = -3; dy <= 3; dy++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        const nx = startX + dx, ny = startY + dy;
+        walls.delete(k(nx, ny));
+        if (treeMap[ny]) treeMap[ny][nx] = false;
+        if (waterMap[ny]) waterMap[ny][nx] = false;
+        // Remove any enemies/forts from spawn area
+        enemies = enemies.filter(e => !(e.x === nx && e.y === ny));
+        forts = forts.filter(f => !(f.x === nx && f.y === ny));
+      }
+    }
+    // Create home castle
+    const garrison = newArmy();
+    addTroops(garrison, 'militia', 3);
+    playerForts.push({ gx: startX, gy: startY, garrison, walls: 0, turrets: 0, mines: 0, isHome: true });
+
+    // Place starting buildings (1 house, 1 farm)
+    buildings.push({ id: nextBuildingId++, type: 'house', gx: startX - 1, gy: startY - 1, level: 0, workers: 0, built: true, buildProgress: 0, buildTarget: 0, upgrading: false, hp: 10, maxHp: 10 });
+    buildings.push({ id: nextBuildingId++, type: 'farm', gx: startX + 1, gy: startY - 1, level: 0, workers: 0, built: true, buildProgress: 0, buildTarget: 0, upgrading: false, hp: 10, maxHp: 10 });
+    // Clear trees from building spots
+    if (treeMap[startY - 1]) { treeMap[startY - 1][startX - 1] = false; treeMap[startY - 1][startX + 1] = false; }
+
+    recalcTerritory();
+  } else if (playerForts.length > 0) {
+    const home = playerForts.find(f => f.isHome) || playerForts[0];
+    if (home) { player.x = home.gx; player.y = home.gy; playerVisual = { x: home.gx, y: home.gy }; }
+  }
+
+  camX = player.x; camY = player.y;
+  revealAround(player.x, player.y, 5);
+  for (const pf of playerForts) revealAround(pf.gx, pf.gy, 3 + (pf.walls || 0));
+
+  initEnemyVisuals();
+  minimapDirty = true;
+  gameMode = 'overworld';
+  applyBuildingEffects();
+  updateHUD();
+  msg('Build your kingdom and conquer the realm!');
+  draw();
+}
+
+function initEnemyVisuals() {
+  for (const e of enemies) { e.vx = e.x; e.vy = e.y; }
+}
+
+// -----------------------------------------------
+//  TERRITORY CALCULATION (sparse territoryMap)
+// -----------------------------------------------
+function recalcTerritory() {
+  territoryMap = {};
+  // BFS from player castles
+  for (const pf of playerForts) {
+    const maxR = 3 + (pf.walls || 0);
+    const queue = [{ x: pf.gx, y: pf.gy, d: 0 }];
+    const visited = new Set();
+    visited.add(k(pf.gx, pf.gy));
+    territoryMap[k(pf.gx, pf.gy)] = 'player';
+    while (queue.length) {
+      const c = queue.shift();
+      if (c.d >= maxR) continue;
+      for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+        const nx = c.x + dx, ny = c.y + dy;
+        if (nx < 0 || ny < 0) continue;
+        const nk = k(nx, ny);
+        if (visited.has(nk)) continue;
+        if (walls.has(nk) && !playerForts.some(f => f.gx === nx && f.gy === ny)) continue;
+        if (waterMap[ny] && waterMap[ny][nx]) continue;
+        visited.add(nk);
+        territoryMap[nk] = 'player';
+        queue.push({ x: nx, y: ny, d: c.d + 1 });
+      }
+    }
+  }
+  // BFS from enemy castles
+  for (const ef of forts) {
+    const maxR = 3;
+    const queue = [{ x: ef.x, y: ef.y, d: 0 }];
+    const visited = new Set();
+    visited.add(k(ef.x, ef.y));
+    if (!territoryMap[k(ef.x, ef.y)]) territoryMap[k(ef.x, ef.y)] = 'enemy';
+    while (queue.length) {
+      const c = queue.shift();
+      if (c.d >= maxR) continue;
+      for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+        const nx = c.x + dx, ny = c.y + dy;
+        if (nx < 0 || ny < 0) continue;
+        const nk = k(nx, ny);
+        if (visited.has(nk)) continue;
+        if (walls.has(nk)) continue;
+        if (waterMap[ny] && waterMap[ny][nx]) continue;
+        if (territoryMap[nk] === 'player') continue;
+        visited.add(nk);
+        territoryMap[nk] = 'enemy';
+        queue.push({ x: nx, y: ny, d: c.d + 1 });
+      }
+    }
+  }
+  // Recalculate gold income from mines
+  goldPerTurn = 0;
+  for (const pf of playerForts) {
+    if (pf.mines > 0) goldPerTurn += FORT_UPGRADE_DEFS.mines[pf.mines - 1].income;
+  }
+  minimapDirty = true;
+}
+
+// -----------------------------------------------
+//  PARTICLE AND FLOATING TEXT SPAWN HELPERS
+// -----------------------------------------------
+function spawnParticles(x, y, color, count, speed) {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      gx: x, gy: y,
+      ox: (Math.random() - 0.5) * 10, oy: (Math.random() - 0.5) * 10,
+      vx: (Math.random() - 0.5) * speed, vy: (Math.random() - 0.5) * speed - 1,
+      life: 30 + randInt(0, 20), maxLife: 50, color, size: 2 + Math.random() * 3,
+    });
+  }
+}
+
+function spawnFloatingText(x, y, text, color) {
+  floatingTexts.push({ gx: x, gy: y, oy: -20, text, color, life: 60 });
+}
+
+function notify(text, color) {
+  notifications.push({ text, color: color || '#ccc', time: 120 });
+  if (notifications.length > 5) notifications.shift();
+}
+
+// -----------------------------------------------
+//  BUILDING EFFECT HELPERS (merged from settlers)
+// -----------------------------------------------
+function applyBuildingEffects() {
+  let newPopCap = 4; // base from home castle
+  let newStorageCap = { wood: 100, stone: 100, iron: 50, gold: 200, meat: 50, crops: 80 };
+  let moraleBon = 0;
+  for (const bld of buildings) {
+    if (!bld.built) continue;
+    const def = BUILDING_DEFS[bld.type];
+    if (!def) continue;
+    const lvl = def.levels[bld.level];
+    if (lvl.popCap) newPopCap += lvl.popCap;
+    if (lvl.storageCap) {
+      for (const r of RESOURCES) newStorageCap[r] = (newStorageCap[r] || 0) + lvl.storageCap;
+    }
+    if (lvl.moraleBonus) moraleBon += lvl.moraleBonus;
+  }
+  popCap = newPopCap;
+  storageCap = newStorageCap;
+  // Cap resources to storage
+  for (const r of RESOURCES) {
+    if (resources[r] > storageCap[r]) resources[r] = storageCap[r];
+  }
+}
+
+function getToolBonus() {
+  let bonus = 0;
+  for (const bld of buildings) {
+    if (bld.type === 'blacksmith' && bld.built) {
+      bonus += BUILDING_DEFS.blacksmith.levels[bld.level].toolBonus;
+    }
+  }
+  return bonus;
+}
+
+function calcFoodProduction() {
+  let food = 0;
+  for (const bld of buildings) {
+    if (!bld.built || bld.workers === 0) continue;
+    const def = BUILDING_DEFS[bld.type];
+    if (!def) continue;
+    const lvl = def.levels[bld.level];
+    if (lvl.production) {
+      if (lvl.production.crops) food += lvl.production.crops;
+      if (lvl.production.meat) food += lvl.production.meat;
+    }
+  }
+  return food;
+}

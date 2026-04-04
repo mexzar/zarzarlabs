@@ -1,0 +1,1690 @@
+// ===============================================
+//  PART 3: GAMEPLAY SYSTEMS
+// ===============================================
+
+// -----------------------------------------------
+//  MAIN MOVEMENT FUNCTION (merged with settlers ticks)
+// -----------------------------------------------
+function tryMove(dx, dy) {
+  if (gameMode !== 'overworld') return;
+  if (isAnimating) return;
+
+  const nx = player.x + dx;
+  const ny = player.y + dy;
+
+  // No COLS/ROWS bounds; just check non-negative
+  if (nx < 0 || ny < 0) return;
+
+  // Expand map / generate new chunks around destination
+  expandMapIfNeeded(nx, ny);
+
+  // Water check
+  if (waterMap[ny] && waterMap[ny][nx]) { msg('Cannot cross water'); return; }
+  // Wall check
+  if (walls.has(k(nx, ny))) {
+    // Check if it is an enemy castle wall
+    if (!forts.some(f => f.x === nx && f.y === ny) && !playerForts.some(f => f.gx === nx && f.gy === ny)) {
+      msg('A wall blocks the way');
+      return;
+    }
+  }
+
+  // ---- INTERACTIONS AT DESTINATION ----
+
+  // Build mode: place building
+  if (buildMode && buildSelected) {
+    if (canBuild(buildSelected, nx, ny)) {
+      placeBuilding(buildSelected, nx, ny);
+      buildMode = false;
+      buildSelected = null;
+      msg('');
+    } else {
+      msg('Cannot build here');
+    }
+    return;
+  }
+
+  // --- Enemy encounter ---
+  const eIdx = enemies.findIndex(e => e.x === nx && e.y === ny);
+  if (eIdx !== -1) {
+    enterBattle(enemies, eIdx, false);
+    return;
+  }
+
+  // --- Enemy castle encounter ---
+  const fIdx = forts.findIndex(f => f.x === nx && f.y === ny);
+  if (fIdx !== -1) {
+    enterBattle(forts, fIdx, true);
+    return;
+  }
+
+  // --- Player castle ---
+  const pfIdx = playerForts.findIndex(f => f.gx === nx && f.gy === ny);
+  if (pfIdx !== -1) {
+    showCastleMenu(pfIdx);
+    // still move onto it
+  }
+
+  // --- Building click ---
+  const bldIdx = buildings.findIndex(b => b.gx === nx && b.gy === ny);
+  if (bldIdx !== -1) {
+    showBuildingInfo(buildings[bldIdx].id);
+  }
+
+  // Update follower trail
+  followerTrail.unshift({ x: player.x, y: player.y });
+  if (followerTrail.length > 20) followerTrail.pop();
+
+  // Move player
+  player.lastDx = dx;
+  player.lastDy = dy;
+  player.x = nx;
+  player.y = ny;
+
+  // Smooth animation
+  moveQueue.push({ x: nx, y: ny });
+
+  turnCount++;
+
+  // --- Ally pickup ---
+  const aIdx = allies.findIndex(a => a.x === nx && a.y === ny);
+  if (aIdx !== -1) {
+    const ally = allies[aIdx];
+    addTroops(player.army, ally.troopType, ally.count);
+    spawnParticles(nx, ny, TROOP_TYPES[ally.troopType] ? TROOP_TYPES[ally.troopType].color : '#4fc3f7', 12, 3);
+    spawnFloatingText(nx, ny, '+' + ally.count + ' ' + (TROOP_TYPES[ally.troopType] ? TROOP_TYPES[ally.troopType].name : ally.troopType), '#4fc3f7');
+    msg('Recruited ' + ally.count + ' ' + (TROOP_TYPES[ally.troopType] ? TROOP_TYPES[ally.troopType].name : ally.troopType) + '!');
+    allies.splice(aIdx, 1);
+  }
+
+  // --- Chest pickup ---
+  const cIdx = chests.findIndex(c => c.x === nx && c.y === ny);
+  if (cIdx !== -1) {
+    const chest = chests[cIdx];
+    gold += chest.gold;
+    spawnParticles(nx, ny, '#ffd54f', 15, 4);
+    spawnFloatingText(nx, ny, '+' + chest.gold + ' Gold', '#ffd54f');
+    msg('Found a chest! +' + chest.gold + ' gold');
+    chests.splice(cIdx, 1);
+  }
+
+  // --- Mercenary camp ---
+  const mIdx = mercCamps.findIndex(m => m.x === nx && m.y === ny);
+  if (mIdx !== -1) {
+    const camp = mercCamps[mIdx];
+    if (gold >= camp.cost) {
+      showOverlay('MERCENARY CAMP', camp.count + ' ' + TROOP_TYPES[camp.troopType].name + ' for hire.\nCost: ' + camp.cost + ' gold\nYour gold: ' + gold, 'Hire', () => {
+        if (gold >= camp.cost) {
+          gold -= camp.cost;
+          addTroops(player.army, camp.troopType, camp.count);
+          spawnParticles(nx, ny, TROOP_TYPES[camp.troopType].color, 12, 3);
+          spawnFloatingText(nx, ny, '+' + camp.count + ' ' + TROOP_TYPES[camp.troopType].name, '#ffd54f');
+          msg('Hired ' + camp.count + ' ' + TROOP_TYPES[camp.troopType].name + '!');
+          mercCamps.splice(mIdx, 1);
+          updateHUD();
+          draw();
+        }
+      });
+    } else {
+      msg('Not enough gold to hire mercenaries (' + camp.cost + 'g needed)');
+    }
+  }
+
+  // --- Overworld smith pickup ---
+  const sIdx = overworldEngineers.findIndex(s => s.x === nx && s.y === ny);
+  if (sIdx !== -1) {
+    recruitedEngineers++;
+    engineerATKBonus += 2;
+    spawnParticles(nx, ny, '#ff9800', 15, 4);
+    spawnFloatingText(nx, ny, 'Smith Recruited!', '#ff9800');
+    msg('Recruited a smith! +2 ATK bonus (total: ' + engineerATKBonus + ')');
+    overworldEngineers.splice(sIdx, 1);
+  }
+
+  // ---- PER-TURN TICKS (settlers-merged) ----
+  resourceTick();
+  advanceConstruction();
+  advanceResearch();
+  if (turnCount % 5 === 0) populationGrowth();
+
+  // ---- Gold mine income from castles ----
+  if (goldPerTurn > 0 && turnCount % 3 === 0) {
+    gold += goldPerTurn;
+    spawnFloatingText(player.x, player.y, '+' + goldPerTurn + 'g', '#ffd54f');
+  }
+
+  // ---- Tension timer: spawns harder enemies near player ----
+  tensionTimer++;
+  if (tensionTimer >= 30) {
+    tensionTimer = 0;
+    const diff = getDifficulty();
+    const type = pickEnemyType(diff);
+    const def = ENEMY_TYPES[type];
+    const spot = freeSpotNear(player.x, player.y, 12);
+    if (spot) {
+      const str = Math.ceil((6 + diff * 3) * def.strMul);
+      enemies.push({ x: spot.x, y: spot.y, str, type, patrol: 0, charged: false, arrowCooldown: 0, vx: spot.x, vy: spot.y });
+    }
+  }
+
+  // ---- Castle garrison decay / raider/bandit attacks ----
+  for (const pf of playerForts) {
+    if (turnCount % 20 === 0 && armyTotal(pf.garrison) > 0) {
+      // Small garrison attrition from bandits
+      const lost = Math.random() < 0.3 ? 1 : 0;
+      if (lost > 0) loseTroops(pf.garrison, lost);
+    }
+  }
+
+  // ---- Enemy reinforcements ----
+  if (turnCount % 25 === 0) {
+    for (const e of enemies) {
+      if (e.str < 50) e.str += randInt(1, 3);
+    }
+    for (const f of forts) {
+      if (f.str < 80) f.str += randInt(2, 5);
+    }
+  }
+
+  // ---- Chest respawning ----
+  if (turnCount % 40 === 0) {
+    const spot = freeSpot();
+    if (spot) {
+      chests.push({ x: spot.x, y: spot.y, gold: 8 + randInt(0, 12 + getDifficulty() * 2) });
+    }
+  }
+
+  // ---- Dark mage spawns trolls ----
+  if (turnCount % 9 === 0) {
+    for (const e of enemies) {
+      if (e.type === 'dark_mage') {
+        const spot = freeSpotNear(e.x, e.y, 3);
+        if (spot) {
+          const trollDef = ENEMY_TYPES['troll'];
+          enemies.push({ x: spot.x, y: spot.y, str: Math.ceil(8 * trollDef.strMul), type: 'troll', patrol: 0, charged: false, arrowCooldown: 0, vx: spot.x, vy: spot.y });
+        }
+      }
+    }
+  }
+
+  // ---- Enemy attacks on player castles ----
+  checkEnemyAttacks();
+
+  // ---- Fog, HUD, draw ----
+  dimFog();
+  updateHUD();
+  draw();
+
+  // ---- Victory milestone check ----
+  if (forts.length === 0 && playerForts.length >= 5) {
+    showOverlay('KINGDOM ESTABLISHED!', 'You have conquered all enemy castles and hold ' + playerForts.length + ' castles!\nYour kingdom thrives. You may continue expanding or declare victory.', 'Continue', () => {});
+  }
+}
+
+// -----------------------------------------------
+//  CHECK ENEMY ATTACKS ON PLAYER CASTLES
+// -----------------------------------------------
+function checkEnemyAttacks() {
+  for (let fi = playerForts.length - 1; fi >= 0; fi--) {
+    const pf = playerForts[fi];
+    for (let ei = enemies.length - 1; ei >= 0; ei--) {
+      const e = enemies[ei];
+      const d = Math.abs(e.x - pf.gx) + Math.abs(e.y - pf.gy);
+      if (d <= 2 && Math.random() < 0.15) {
+        // Enemy attacks this castle
+        const garrisonPwr = effectivePower(pf.garrison, e.str, e.type);
+        const wallDef = pf.walls > 0 ? FORT_UPGRADE_DEFS.walls[pf.walls - 1].def : 0;
+        const turretDmg = pf.turrets > 0 ? FORT_UPGRADE_DEFS.turrets[pf.turrets - 1].dmg : 0;
+        const totalDef = garrisonPwr + wallDef + turretDmg;
+
+        if (totalDef >= e.str) {
+          // Defend success
+          const losses = Math.max(1, Math.floor(e.str / (totalDef + 1) * armyTotal(pf.garrison)));
+          loseTroops(pf.garrison, losses);
+          notify('Castle defended! Lost ' + losses + ' troops', '#66bb6a');
+          spawnParticles(pf.gx, pf.gy, '#66bb6a', 12, 3);
+          enemies.splice(ei, 1);
+          kills++;
+        } else {
+          // Choose: auto-defend or abandon
+          if (player.x === pf.gx && player.y === pf.gy) {
+            defendFort(fi, ei);
+          } else if (armyTotal(pf.garrison) > 0) {
+            // Auto-defend attempt
+            const losses = Math.ceil(armyTotal(pf.garrison) * 0.6);
+            loseTroops(pf.garrison, losses);
+            const eDmg = Math.max(1, Math.floor(totalDef * 0.5));
+            e.str -= eDmg;
+            if (e.str <= 0) {
+              enemies.splice(ei, 1);
+              kills++;
+              notify('Castle garrison fought off an attacker!', '#66bb6a');
+            } else {
+              notify('Castle under siege! Garrison weakened.', '#ff9800');
+            }
+          } else {
+            abandonFort(fi, ei);
+          }
+        }
+        break;
+      }
+    }
+  }
+}
+
+// -----------------------------------------------
+//  DEFEND CASTLE (player present)
+// -----------------------------------------------
+function defendFort(fortIdx, enemyIdx) {
+  const pf = playerForts[fortIdx];
+  const e = enemies[enemyIdx];
+  const wallDef = pf.walls > 0 ? FORT_UPGRADE_DEFS.walls[pf.walls - 1].def : 0;
+  const turretDmg = pf.turrets > 0 ? FORT_UPGRADE_DEFS.turrets[pf.turrets - 1].dmg : 0;
+
+  // Combine player army + garrison for defense
+  const combinedArmy = newArmy();
+  for (const t of TROOP_ORDER) {
+    if (Array.isArray(player.army[t])) {
+      for (const u of player.army[t]) combinedArmy[t].push({ ...u });
+    }
+    if (Array.isArray(pf.garrison[t])) {
+      for (const u of pf.garrison[t]) combinedArmy[t].push({ ...u });
+    }
+  }
+
+  const totalPwr = effectivePower(combinedArmy, e.str, e.type) + wallDef + turretDmg;
+  if (totalPwr >= e.str) {
+    const losses = Math.max(1, Math.floor(e.str / (totalPwr + 1) * armyTotal(combinedArmy) * 0.3));
+    loseTroops(player.army, Math.ceil(losses * 0.5));
+    loseTroops(pf.garrison, Math.floor(losses * 0.5));
+    enemies.splice(enemyIdx, 1);
+    kills++;
+    msg('Castle defended! Lost ' + losses + ' troops');
+    spawnParticles(pf.gx, pf.gy, '#66bb6a', 15, 4);
+    spawnFloatingText(pf.gx, pf.gy, 'Castle Defended!', '#66bb6a');
+    notify('Castle successfully defended!', '#66bb6a');
+  } else {
+    const losses = Math.ceil(armyTotal(combinedArmy) * 0.5);
+    loseTroops(player.army, Math.ceil(losses * 0.6));
+    loseTroops(pf.garrison, Math.floor(losses * 0.4));
+    e.str -= Math.floor(totalPwr * 0.4);
+    if (e.str <= 0) {
+      enemies.splice(enemyIdx, 1);
+      kills++;
+      notify('Attackers repelled, but heavy losses!', '#ff9800');
+    } else {
+      notify('Castle walls breached! Garrison damaged.', '#ef5350');
+    }
+  }
+  updateHUD();
+  draw();
+}
+
+// -----------------------------------------------
+//  ABANDON CASTLE
+// -----------------------------------------------
+function abandonFort(fortIdx, enemyIdx) {
+  const pf = playerForts[fortIdx];
+  notify('Castle Abandoned at (' + pf.gx + ',' + pf.gy + ')!', '#ef5350');
+  spawnParticles(pf.gx, pf.gy, '#ef5350', 20, 5);
+  spawnFloatingText(pf.gx, pf.gy, 'Castle Abandoned!', '#ef5350');
+  // Convert back to enemy castle
+  forts.push({ x: pf.gx, y: pf.gy, str: enemies[enemyIdx].str, garrisoned: false });
+  playerForts.splice(fortIdx, 1);
+  enemies.splice(enemyIdx, 1);
+  recalcTerritory();
+  applyBuildingEffects();
+  updateHUD();
+  draw();
+}
+
+// -----------------------------------------------
+//  ENTER BATTLE (tactical battle trigger)
+// -----------------------------------------------
+function enterBattle(arr, idx, isFort) {
+  const target = arr[idx];
+  const enemyStr = isFort ? target.str : target.str;
+  const enemyType = isFort ? null : target.type;
+
+  // Determine enemy composition for tactical battle
+  let enemyArmy = {};
+  if (isFort) {
+    // Castle garrison: mix of raiders, bandits, enemy archers
+    const total = Math.max(3, Math.floor(target.str / 4));
+    const raiders = Math.floor(total * 0.3);
+    const bandits = Math.floor(total * 0.3);
+    const archers = Math.floor(total * 0.2);
+    const heavy = total - raiders - bandits - archers;
+    enemyArmy = { bandit: bandits, raider: raiders, enemy_archer: archers, war_elephant: Math.floor(heavy / 2), troll: heavy - Math.floor(heavy / 2) };
+  } else {
+    // Single enemy type encounter
+    const type = target.type || 'bandit';
+    const count = Math.max(1, Math.ceil(target.str / (ENEMY_TYPES[type] ? Math.ceil(ENEMY_TYPES[type].strMul * 5) : 3)));
+    enemyArmy = { [type]: count };
+
+    // Dark mage brings trolls
+    if (type === 'dark_mage') {
+      enemyArmy['troll'] = Math.max(1, Math.floor(count * 0.5));
+    }
+  }
+
+  // Store battle context
+  battle = {
+    isFort,
+    arrRef: arr,
+    idx,
+    target,
+    enemyArmy,
+    enemyType,
+    enemyStr,
+    playerUnits: [],
+    enemyUnits: [],
+    deploySlots: {},
+    fortBonus: isFort ? 5 : 0,
+    turn: 0,
+    log: [],
+    result: null,
+    goldReward: isFort ? Math.floor(target.str * 2) : Math.max(5, Math.floor(target.str * (ENEMY_TYPES[target.type] ? ENEMY_TYPES[target.type].goldMul : 0.3))),
+    troopReward: (!isFort && ENEMY_TYPES[target.type]) ? ENEMY_TYPES[target.type].yields : 'militia',
+    rewardCount: isFort ? 0 : Math.max(1, Math.floor(target.str / 6)),
+  };
+
+  // Switch to deploy mode
+  gameMode = 'deploy';
+  deploySelectedType = null;
+
+  // Populate enemy units for tactical battle
+  battle.enemyUnits = [];
+  for (const [type, count] of Object.entries(enemyArmy)) {
+    const stats = ENEMY_BATTLE_STATS[type];
+    if (!stats) continue;
+    for (let i = 0; i < count; i++) {
+      const col = BCOLS - 1 - Math.floor(i / BROWS);
+      const row = i % BROWS;
+      battle.enemyUnits.push({
+        type,
+        hp: stats.hp,
+        maxHp: stats.hp,
+        atk: stats.atk,
+        range: stats.range,
+        moveRange: stats.moveRange,
+        aoe: stats.aoe || 0,
+        heavy: stats.heavy || false,
+        gx: Math.min(BCOLS - 1, Math.max(0, col)),
+        gy: Math.min(BROWS - 1, Math.max(0, row)),
+        moved: false,
+        attacked: false,
+        side: 'enemy',
+        moveSpeed: stats.moveSpeed || 0.025,
+        attackRate: stats.attackRate || 50,
+        vx: 0, vy: 0,
+      });
+    }
+  }
+
+  msg('DEPLOY your troops! Click unit type, then click grid. Press FIGHT when ready.');
+  updateHUD();
+  draw();
+}
+
+// -----------------------------------------------
+//  COMBAT STUBS (tactical battle replaces old auto-combat)
+// -----------------------------------------------
+function combat() {
+  // Stub - tactical battle system handles combat in Part 4
+}
+
+function combatFort() {
+  // Stub - tactical battle system handles castle assault in Part 4
+}
+
+// -----------------------------------------------
+//  SHOP FUNCTIONS
+// -----------------------------------------------
+function shopCost(type) {
+  return TROOP_TYPES[type] ? TROOP_TYPES[type].cost : 10;
+}
+
+function shopBuy(type) {
+  if (gameMode !== 'overworld') return;
+  const def = TROOP_TYPES[type];
+  if (!def) return;
+  const cost = def.cost;
+  const qty = def.qty || 1;
+  if (gold < cost) { msg('Not enough gold (' + cost + 'g needed)'); return; }
+  gold -= cost;
+  addTroops(player.army, type, qty);
+  spawnParticles(player.x, player.y, def.color, 10, 3);
+  spawnFloatingText(player.x, player.y, '+' + qty + ' ' + def.name, def.color);
+  msg('Recruited ' + qty + ' ' + def.name + '!');
+  updateHUD();
+  draw();
+}
+
+function shopScout() {
+  if (gameMode !== 'overworld') return;
+  if (gold < 15) { msg('Not enough gold (15g needed)'); return; }
+  gold -= 15;
+  scouted = true;
+  revealAround(player.x, player.y, 15);
+  spawnParticles(player.x, player.y, '#4fc3f7', 20, 5);
+  msg('Scout reveals the area!');
+  updateHUD();
+  draw();
+}
+
+function healCost() { return 20; }
+
+function shopHealAll() {
+  if (gameMode !== 'overworld') return;
+  const cost = healCost();
+  if (gold < cost) { msg('Not enough gold (' + cost + 'g needed)'); return; }
+  let healed = 0;
+  for (const t of TROOP_ORDER) {
+    if (Array.isArray(player.army[t])) {
+      for (const u of player.army[t]) {
+        if (u.hp < u.maxHp) { u.hp = u.maxHp; healed++; }
+      }
+    }
+  }
+  if (healed === 0) { msg('All troops already at full health'); return; }
+  gold -= cost;
+  spawnParticles(player.x, player.y, '#66bb6a', 15, 3);
+  spawnFloatingText(player.x, player.y, 'Healed ' + healed + ' troops', '#66bb6a');
+  msg('Healed ' + healed + ' troops!');
+  updateHUD();
+  draw();
+}
+
+function engineerBuy(upgradeKey) {
+  if (gameMode !== 'overworld') return;
+  const def = UPGRADE_DEFS[upgradeKey];
+  if (!def) return;
+  const lvl = upgrades[upgradeKey] || 0;
+  if (lvl >= def.maxLvl) { msg(def.name + ' already max level'); return; }
+  const cost = def.costs[lvl];
+  if (gold < cost) { msg('Not enough gold (' + cost + 'g needed)'); return; }
+  gold -= cost;
+  upgrades[upgradeKey] = lvl + 1;
+  spawnParticles(player.x, player.y, '#ff9800', 12, 3);
+  spawnFloatingText(player.x, player.y, def.name + ' Lv' + (lvl + 1), '#ff9800');
+  msg(def.name + ' upgraded to level ' + (lvl + 1) + '!');
+  // Update blacksmith shop button text
+  updateBlacksmithButtons();
+  updateHUD();
+  draw();
+}
+
+function updateBlacksmithButtons() {
+  const shop = document.getElementById('blacksmith-shop');
+  if (!shop) return;
+  const btns = shop.querySelectorAll('button');
+  const keys = ['armorPiercing', 'extendedMag', 'reinforced', 'explosiveRounds'];
+  for (let i = 0; i < btns.length && i < keys.length; i++) {
+    const key = keys[i];
+    const def = UPGRADE_DEFS[key];
+    const lvl = upgrades[key] || 0;
+    if (lvl >= def.maxLvl) {
+      btns[i].textContent = def.name + ' MAX';
+      btns[i].disabled = true;
+    } else {
+      btns[i].textContent = def.name + ' Lv' + lvl + ' (' + def.costs[lvl] + 'g)';
+    }
+  }
+}
+
+// -----------------------------------------------
+//  WIN / LOSE
+// -----------------------------------------------
+function checkGameWin() {
+  if (playerForts.length >= 5 && forts.length === 0) {
+    showOverlay('KINGDOM ESTABLISHED!',
+      'All enemy castles conquered!\nYou hold ' + playerForts.length + ' castles.\nArmy Power: ' + armyPower(player.army) +
+      '\nGold: ' + gold + '\nKills: ' + kills +
+      '\n\nYour kingdom stretches across the realm.\nYou may continue expanding (sandbox) or declare victory.',
+      'Declare Victory', () => {
+        showOverlay('VICTORY!', 'Lord ' + (playerName || 'Unknown') + ' has united the realm!\n\nFinal Stats:\nCastles: ' + playerForts.length + '\nArmy: ' + armyPower(player.army) + '\nGold: ' + gold + '\nKills: ' + kills + '\nTurns: ' + turnCount, 'New Game', () => { newGame(); });
+      });
+  }
+}
+
+function gameOver() {
+  showOverlay('DEFEAT', 'Lord ' + (playerName || 'Unknown') + ' has fallen!\n\nYour army was destroyed.\nKills: ' + kills + '\nTurns survived: ' + turnCount + '\nCastles held: ' + playerForts.length, 'Try Again', () => { newGame(); });
+}
+
+// -----------------------------------------------
+//  OVERLAY FUNCTIONS
+// -----------------------------------------------
+let overlayCallback = null;
+
+function showOverlay(title, message, btnText, callback, showInput) {
+  document.getElementById('overlayTitle').textContent = title;
+  document.getElementById('overlayTitle').style.color = '#f0c040';
+  document.getElementById('overlayMsg').textContent = message;
+  document.getElementById('overlayBtn').textContent = btnText || 'Continue';
+  document.getElementById('overlayBtn').style.display = '';
+  document.getElementById('overlayMsg').innerHTML = '';
+  document.getElementById('overlayMsg').textContent = message;
+  const input = document.getElementById('overlayInput');
+  if (showInput) {
+    input.style.display = '';
+    input.value = playerName || '';
+    input.focus();
+  } else {
+    input.style.display = 'none';
+  }
+  overlayCallback = callback;
+  document.getElementById('overlay').classList.add('show');
+}
+
+function overlayAction() {
+  const input = document.getElementById('overlayInput');
+  if (input.style.display !== 'none') {
+    playerName = input.value.trim() || 'Lord';
+    input.style.display = 'none';
+  }
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('overlayMsg').innerHTML = '';
+  document.getElementById('overlayBtn').style.display = '';
+  if (overlayCallback) {
+    const cb = overlayCallback;
+    overlayCallback = null;
+    cb();
+  }
+}
+
+// -----------------------------------------------
+//  CASTLE MENU (was showFortMenu)
+// -----------------------------------------------
+function showCastleMenu(idx) {
+  if (idx < 0 || idx >= playerForts.length) return;
+  fortMenuOpen = true;
+  fortMenuIndex = idx;
+  const pf = playerForts[idx];
+  const isHome = pf.isHome;
+  const title = isHome ? 'HOME CASTLE' : 'CASTLE #' + (idx + 1);
+
+  let html = '<div style="text-align:center;font-family:sans-serif;max-width:450px">';
+  html += '<h3 style="color:#f0c040;margin:0 0 8px">' + title + '</h3>';
+  html += '<p style="color:#aaa;font-size:11px">Location: (' + pf.gx + ', ' + pf.gy + ')</p>';
+
+  // Garrison info
+  html += '<p style="color:#ccc;font-size:11px;margin:4px 0"><b>Garrison:</b> ' + armySummary(pf.garrison) + '</p>';
+  html += '<p style="color:#aaa;font-size:10px">Garrison Power: ' + armyPower(pf.garrison) + '</p>';
+
+  // Garrison transfer
+  html += '<div style="margin:6px 0">';
+  html += '<p style="color:#4fc3f7;font-size:11px;margin:2px 0">Transfer troops:</p>';
+  for (const t of TROOP_ORDER) {
+    const playerCount = armyCount(player.army, t);
+    const garrisonCount = armyCount(pf.garrison, t);
+    if (playerCount > 0 || garrisonCount > 0) {
+      html += '<div style="font-size:10px;margin:2px 0;color:#ccc">';
+      html += TROOP_TYPES[t].name + ': You=' + playerCount + ' Castle=' + garrisonCount + ' ';
+      if (playerCount > 0) html += '<button onclick="garrisonTransfer(' + idx + ',\'' + t + '\',\'in\',1)" style="font-size:9px;padding:1px 4px">+1 In</button> ';
+      if (garrisonCount > 0) html += '<button onclick="garrisonTransfer(' + idx + ',\'' + t + '\',\'out\',1)" style="font-size:9px;padding:1px 4px">+1 Out</button>';
+      html += '</div>';
+    }
+  }
+  html += '</div>';
+
+  // Castle upgrades
+  html += '<div style="margin:6px 0">';
+  html += '<p style="color:#ff9800;font-size:11px;margin:2px 0">Upgrades:</p>';
+
+  // Walls
+  const wallLvl = pf.walls || 0;
+  if (wallLvl < FORT_UPGRADE_DEFS.walls.length) {
+    const wu = FORT_UPGRADE_DEFS.walls[wallLvl];
+    html += '<button onclick="castleUpgrade(' + idx + ',\'walls\')" style="font-size:10px;padding:2px 6px;margin:2px">' + wu.name + ' (' + wu.cost + 'g) +' + wu.def + ' DEF</button> ';
+  } else {
+    html += '<span style="font-size:10px;color:#4caf50">Walls: MAX</span> ';
+  }
+
+  // Turrets
+  const turretLvl = pf.turrets || 0;
+  if (turretLvl < FORT_UPGRADE_DEFS.turrets.length) {
+    const tu = FORT_UPGRADE_DEFS.turrets[turretLvl];
+    html += '<button onclick="castleUpgrade(' + idx + ',\'turrets\')" style="font-size:10px;padding:2px 6px;margin:2px">' + tu.name + ' (' + tu.cost + 'g) +' + tu.dmg + ' DMG</button> ';
+  } else {
+    html += '<span style="font-size:10px;color:#4caf50">Turrets: MAX</span> ';
+  }
+
+  // Mines
+  const mineLvl = pf.mines || 0;
+  if (mineLvl < FORT_UPGRADE_DEFS.mines.length) {
+    const mu = FORT_UPGRADE_DEFS.mines[mineLvl];
+    html += '<button onclick="castleUpgrade(' + idx + ',\'mines\')" style="font-size:10px;padding:2px 6px;margin:2px">' + mu.name + ' (' + mu.cost + 'g) +' + mu.income + 'g/turn</button>';
+  } else {
+    html += '<span style="font-size:10px;color:#4caf50">Income: MAX</span>';
+  }
+  html += '</div>';
+
+  // Current upgrades summary
+  html += '<p style="font-size:9px;color:#778;margin:4px 0">';
+  if (wallLvl > 0) html += 'Wall: ' + FORT_UPGRADE_DEFS.walls[wallLvl - 1].name + ' ';
+  if (turretLvl > 0) html += 'Turret: ' + FORT_UPGRADE_DEFS.turrets[turretLvl - 1].name + ' ';
+  if (mineLvl > 0) html += 'Income: ' + FORT_UPGRADE_DEFS.mines[mineLvl - 1].name;
+  html += '</p>';
+
+  html += '<button onclick="closeCastleMenu()" style="margin-top:6px;padding:4px 16px">Close</button>';
+  html += '</div>';
+
+  document.getElementById('overlayTitle').textContent = '';
+  document.getElementById('overlayMsg').innerHTML = html;
+  document.getElementById('overlayBtn').style.display = 'none';
+  document.getElementById('overlayInput').style.display = 'none';
+  document.getElementById('overlay').classList.add('show');
+  overlayCallback = () => { document.getElementById('overlayBtn').style.display = ''; document.getElementById('overlayMsg').innerHTML = ''; fortMenuOpen = false; fortMenuIndex = -1; };
+}
+
+// -----------------------------------------------
+//  TRY BUILD CASTLE (was tryBuildFort)
+// -----------------------------------------------
+function tryBuildCastle() {
+  if (gameMode !== 'overworld') return;
+  const px = player.x, py = player.y;
+
+  // Check not on water or wall
+  if (waterMap[py] && waterMap[py][px]) { msg('Cannot build a castle on water'); return; }
+  // Check not on existing castle
+  if (playerForts.some(f => f.gx === px && f.gy === py)) { msg('Already a castle here'); return; }
+  if (forts.some(f => f.x === px && f.y === py)) { msg('Enemy castle here'); return; }
+
+  // Cost: 100 gold + resources
+  const goldCost = 100;
+  const woodCost = 30;
+  const stoneCost = 20;
+  if (gold < goldCost) { msg('Need ' + goldCost + ' gold to build a castle'); return; }
+  if ((resources.wood || 0) < woodCost) { msg('Need ' + woodCost + ' wood to build a castle'); return; }
+  if ((resources.stone || 0) < stoneCost) { msg('Need ' + stoneCost + ' stone to build a castle'); return; }
+
+  gold -= goldCost;
+  resources.wood -= woodCost;
+  resources.stone -= stoneCost;
+
+  const garrison = newArmy();
+  playerForts.push({ gx: px, gy: py, garrison, walls: 0, turrets: 0, mines: 0, isHome: false });
+
+  // Clear trees around
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (treeMap[py + dy]) treeMap[py + dy][px + dx] = false;
+      walls.delete(k(px + dx, py + dy));
+    }
+  }
+
+  spawnParticles(px, py, '#f0c040', 20, 5);
+  spawnFloatingText(px, py, 'Castle Built!', '#f0c040');
+  msg('Castle built! Garrison troops and upgrade it.');
+  notify('New castle built at (' + px + ',' + py + ')', '#f0c040');
+  recalcTerritory();
+  applyBuildingEffects();
+  updateHUD();
+  draw();
+}
+
+// -----------------------------------------------
+//  CLOSE CASTLE MENU
+// -----------------------------------------------
+function closeCastleMenu() {
+  fortMenuOpen = false;
+  fortMenuIndex = -1;
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('overlayBtn').style.display = '';
+  document.getElementById('overlayMsg').innerHTML = '';
+  updateHUD();
+  draw();
+}
+
+// -----------------------------------------------
+//  CASTLE UPGRADE (was fortUpgrade)
+// -----------------------------------------------
+function castleUpgrade(fortIdx, upgradeType) {
+  if (fortIdx < 0 || fortIdx >= playerForts.length) return;
+  const pf = playerForts[fortIdx];
+  const lvl = pf[upgradeType] || 0;
+  const defs = FORT_UPGRADE_DEFS[upgradeType];
+  if (!defs || lvl >= defs.length) { msg('Already max level'); return; }
+  const upgrade = defs[lvl];
+  if (gold < upgrade.cost) { msg('Not enough gold (' + upgrade.cost + 'g needed)'); return; }
+  gold -= upgrade.cost;
+  pf[upgradeType] = lvl + 1;
+  spawnParticles(pf.gx, pf.gy, '#ff9800', 12, 3);
+  spawnFloatingText(pf.gx, pf.gy, upgrade.name + '!', '#ff9800');
+  msg('Upgraded to ' + upgrade.name + '!');
+  notify(upgrade.name + ' built!', '#ff9800');
+  recalcTerritory();
+  // Refresh menu
+  showCastleMenu(fortIdx);
+  updateHUD();
+}
+
+// -----------------------------------------------
+//  GARRISON TRANSFER
+// -----------------------------------------------
+function garrisonTransfer(fortIdx, troopType, direction, count) {
+  if (fortIdx < 0 || fortIdx >= playerForts.length) return;
+  const pf = playerForts[fortIdx];
+  if (direction === 'in') {
+    // Player -> Castle garrison
+    const available = armyCount(player.army, troopType);
+    const toTransfer = Math.min(available, count);
+    if (toTransfer <= 0) { msg('No ' + TROOP_TYPES[troopType].name + ' to transfer'); return; }
+    // Move units
+    for (let i = 0; i < toTransfer; i++) {
+      if (Array.isArray(player.army[troopType]) && player.army[troopType].length > 0) {
+        const unit = player.army[troopType].pop();
+        if (!Array.isArray(pf.garrison[troopType])) pf.garrison[troopType] = [];
+        pf.garrison[troopType].push(unit);
+      }
+    }
+    msg('Garrisoned ' + toTransfer + ' ' + TROOP_TYPES[troopType].name);
+  } else {
+    // Castle garrison -> Player
+    const available = armyCount(pf.garrison, troopType);
+    const toTransfer = Math.min(available, count);
+    if (toTransfer <= 0) { msg('No ' + TROOP_TYPES[troopType].name + ' in garrison'); return; }
+    for (let i = 0; i < toTransfer; i++) {
+      if (Array.isArray(pf.garrison[troopType]) && pf.garrison[troopType].length > 0) {
+        const unit = pf.garrison[troopType].pop();
+        if (!Array.isArray(player.army[troopType])) player.army[troopType] = [];
+        player.army[troopType].push(unit);
+      }
+    }
+    msg('Withdrew ' + toTransfer + ' ' + TROOP_TYPES[troopType].name);
+  }
+  // Refresh menu
+  showCastleMenu(fortIdx);
+  updateHUD();
+}
+
+// -----------------------------------------------
+//  RESOURCE TICK (merged from settResourceTick)
+// -----------------------------------------------
+function resourceTick() {
+  const toolBonus = getToolBonus();
+  for (const bld of buildings) {
+    if (!bld.built || bld.workers === 0) continue;
+    const def = BUILDING_DEFS[bld.type];
+    if (!def) continue;
+    const lvl = def.levels[bld.level];
+    if (lvl.production) {
+      for (const [res, amt] of Object.entries(lvl.production)) {
+        if (res === 'gold') continue; // gold handled separately by market
+        const bonus = researched.improvedTools ? 0.25 : 0;
+        const produced = Math.ceil(amt * (1 + bonus + toolBonus * 0.1));
+        resources[res] = Math.min(storageCap[res], (resources[res] || 0) + produced);
+      }
+    }
+    if (lvl.healRate && bld.type === 'hospital') {
+      // Heal population morale
+      if (morale < 10) morale = Math.min(10, morale + 1);
+    }
+  }
+  // Food consumption: 1 crop or meat per 4 population
+  const foodNeeded = Math.ceil(population / 4);
+  let foodEaten = 0;
+  if (resources.crops >= foodNeeded) {
+    resources.crops -= foodNeeded;
+    foodEaten = foodNeeded;
+  } else if (resources.meat >= foodNeeded) {
+    resources.meat -= foodNeeded;
+    foodEaten = foodNeeded;
+  } else {
+    const fromCrops = Math.min(resources.crops, foodNeeded);
+    resources.crops -= fromCrops;
+    const remaining = foodNeeded - fromCrops;
+    const fromMeat = Math.min(resources.meat, remaining);
+    resources.meat -= fromMeat;
+    foodEaten = fromCrops + fromMeat;
+    if (foodEaten < foodNeeded) {
+      notify('Your people are starving!', '#ef5350');
+    }
+  }
+  // Market gold production
+  for (const bld of buildings) {
+    if (bld.type === 'market' && bld.built && bld.workers > 0) {
+      const lvl = BUILDING_DEFS.market.levels[bld.level];
+      if (lvl.production && lvl.production.gold) {
+        gold += lvl.production.gold;
+      }
+    }
+  }
+}
+
+// -----------------------------------------------
+//  ADVANCE CONSTRUCTION (merged from settAdvanceConstruction)
+// -----------------------------------------------
+function advanceConstruction() {
+  for (const bld of buildings) {
+    if (bld.built && !bld.upgrading) continue;
+    bld.buildProgress++;
+    if (bld.buildProgress >= bld.buildTarget) {
+      if (bld.upgrading) {
+        bld.level++;
+        bld.upgrading = false;
+      }
+      bld.built = true;
+      bld.buildProgress = 0;
+      bld.buildTarget = 0;
+      notify(BUILDING_DEFS[bld.type].name + ' completed!', '#4caf50');
+      applyBuildingEffects();
+    }
+  }
+}
+
+// -----------------------------------------------
+//  ADVANCE RESEARCH (merged from settAdvanceResearch)
+// -----------------------------------------------
+function advanceResearch() {
+  if (!currentResearch) return;
+  let speed = 0.5; // base
+  for (const bld of buildings) {
+    if (bld.type === 'academy' && bld.built) {
+      speed += BUILDING_DEFS.academy.levels[bld.level].researchSpeed;
+    }
+  }
+  currentResearch.progress += speed;
+  if (currentResearch.progress >= currentResearch.target) {
+    researched[currentResearch.key] = true;
+    notify('Research complete: ' + TECH_TREE[currentResearch.key].name, '#4fc3f7');
+    currentResearch = null;
+  }
+}
+
+// -----------------------------------------------
+//  POPULATION GROWTH
+// -----------------------------------------------
+function populationGrowth() {
+  if (population >= popCap) return;
+  const food = calcFoodProduction();
+  const foodNeeded = Math.ceil(population / 4);
+  if (food > foodNeeded) {
+    population = Math.min(popCap, population + 1);
+    idleWorkers++;
+    notify('+1 population (' + population + '/' + popCap + ')', '#66bb6a');
+  }
+}
+
+// -----------------------------------------------
+//  HARVEST (adjacent trees/rocks)
+// -----------------------------------------------
+function harvest() {
+  if (gameMode !== 'overworld') return;
+  const dirs = [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]];
+  let harvested = false;
+  const toolBonus = getToolBonus();
+  for (const [dx, dy] of dirs) {
+    const hx = player.x + dx, hy = player.y + dy;
+    if (hx < 0 || hy < 0) continue;
+    if (treeMap[hy] && treeMap[hy][hx]) {
+      const amt = 2 + toolBonus;
+      resources.wood = Math.min(storageCap.wood, resources.wood + amt);
+      treeMap[hy][hx] = false;
+      spawnParticles(hx, hy, '#8d6e63', 8, 3);
+      spawnFloatingText(hx, hy, '+' + amt + ' Wood', '#8d6e63');
+      harvested = true;
+      break;
+    }
+    if (walls.has(k(hx, hy)) && !(waterMap[hy] && waterMap[hy][hx]) && !playerForts.some(f => f.gx === hx && f.gy === hy) && !forts.some(f => f.x === hx && f.y === hy)) {
+      const amt = 2 + toolBonus;
+      resources.stone = Math.min(storageCap.stone, resources.stone + amt);
+      if (Math.random() < 0.2) {
+        resources.iron = Math.min(storageCap.iron, resources.iron + 1);
+        spawnFloatingText(hx, hy, '+1 Iron!', '#78909c');
+      }
+      walls.delete(k(hx, hy));
+      spawnParticles(hx, hy, '#90a4ae', 8, 3);
+      spawnFloatingText(hx, hy, '+' + amt + ' Stone', '#90a4ae');
+      harvested = true;
+      break;
+    }
+  }
+  if (!harvested) msg('Nothing to harvest nearby');
+  else { updateHUD(); draw(); }
+}
+
+// -----------------------------------------------
+//  BUILD MENU FUNCTIONS
+// -----------------------------------------------
+function toggleBuildMenu() {
+  if (gameMode !== 'overworld') return;
+  if (buildMode) { buildMode = false; buildSelected = null; msg(''); return; }
+  // Show build overlay
+  let html = '<div style="text-align:center;font-family:sans-serif;max-width:500px">';
+  html += '<h3 style="color:#f0c040;margin:0 0 8px">BUILD</h3>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:4px;justify-content:center">';
+  for (const [type, def] of Object.entries(BUILDING_DEFS)) {
+    const lvl = def.levels[0];
+    const costStr = Object.entries(lvl.cost).map(([r,a]) => a + ' ' + RESOURCE_DEFS[r].icon).join(', ');
+    const canAfford = Object.entries(lvl.cost).every(([r,a]) => {
+      if (r === 'gold') return gold >= a;
+      return (resources[r] || 0) >= a;
+    });
+    html += '<button onclick="selectBuild(\'' + type + '\')" style="padding:4px 8px;font-size:11px;opacity:' + (canAfford ? '1' : '0.4') + '">';
+    html += def.name + '<br><span style="font-size:9px;color:#aaa">' + costStr + '</span>';
+    if (def.requiresAdj) html += '<br><span style="font-size:8px;color:#ff9800">Needs adj. ' + def.requiresAdj + '</span>';
+    html += '</button>';
+  }
+  html += '</div>';
+  html += '<button onclick="document.getElementById(\'overlay\').classList.remove(\'show\');buildMode=false;buildSelected=null" style="margin-top:8px;padding:4px 16px">Close</button>';
+  html += '</div>';
+  document.getElementById('overlayTitle').textContent = '';
+  document.getElementById('overlayMsg').innerHTML = html;
+  document.getElementById('overlayBtn').style.display = 'none';
+  document.getElementById('overlayInput').style.display = 'none';
+  document.getElementById('overlay').classList.add('show');
+  overlayCallback = () => { document.getElementById('overlayBtn').style.display = ''; document.getElementById('overlayMsg').innerHTML = ''; };
+}
+
+function selectBuild(type) {
+  document.getElementById('overlay').classList.remove('show');
+  document.getElementById('overlayBtn').style.display = '';
+  document.getElementById('overlayMsg').innerHTML = '';
+  buildMode = true;
+  buildSelected = type;
+  msg('Click to place ' + BUILDING_DEFS[type].name + ' (ESC to cancel)');
+}
+
+function canBuild(type, gx, gy) {
+  if (gx < 0 || gy < 0) return false;
+  if (walls.has(k(gx, gy))) return false;
+  if (waterMap[gy] && waterMap[gy][gx]) return false;
+  if (buildings.some(b => b.gx === gx && b.gy === gy)) return false;
+  if (playerForts.some(f => f.gx === gx && f.gy === gy)) return false;
+  if (forts.some(f => f.x === gx && f.y === gy)) return false;
+  if (territoryMap[k(gx, gy)] !== 'player') return false;
+  const def = BUILDING_DEFS[type];
+  if (!def) return false;
+  const lvl = def.levels[0];
+  if (!Object.entries(lvl.cost).every(([r, a]) => {
+    if (r === 'gold') return gold >= a;
+    return (resources[r] || 0) >= a;
+  })) return false;
+  // Check adjacency requirements
+  if (def.requiresAdj) {
+    const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+    let found = false;
+    for (const [dx2, dy2] of dirs) {
+      const ax = gx + dx2, ay = gy + dy2;
+      if (ax < 0 || ay < 0) continue;
+      if (def.requiresAdj === 'tree' && treeMap[ay] && treeMap[ay][ax]) found = true;
+      if (def.requiresAdj === 'wall' && walls.has(k(ax, ay))) found = true;
+      if (def.requiresAdj === 'water' && waterMap[ay] && waterMap[ay][ax]) found = true;
+    }
+    if (!found) return false;
+  }
+  return true;
+}
+
+function placeBuilding(type, gx, gy) {
+  const def = BUILDING_DEFS[type];
+  const lvl = def.levels[0];
+  for (const [r, a] of Object.entries(lvl.cost)) {
+    if (r === 'gold') gold -= a;
+    else resources[r] -= a;
+  }
+  buildings.push({
+    id: nextBuildingId++, type, gx, gy, level: 0,
+    workers: 0, built: false, buildProgress: 0, buildTarget: lvl.buildTime,
+    upgrading: false, hp: 10, maxHp: 10
+  });
+  if (treeMap[gy]) treeMap[gy][gx] = false;
+  walls.delete(k(gx, gy));
+  spawnParticles(gx, gy, '#ffd54f', 10, 3);
+  spawnFloatingText(gx, gy, 'Building ' + def.name, '#ffd54f');
+  notify('Building ' + def.name + '...', '#ffd54f');
+  applyBuildingEffects();
+  recalcTerritory();
+}
+
+function canUpgrade(buildingId) {
+  const bld = buildings.find(b => b.id === buildingId);
+  if (!bld || !bld.built || bld.upgrading) return false;
+  const def = BUILDING_DEFS[bld.type];
+  if (bld.level >= def.levels.length - 1) return false;
+  const nextLvl = def.levels[bld.level + 1];
+  return Object.entries(nextLvl.cost).every(([r, a]) => {
+    if (r === 'gold') return gold >= a;
+    return (resources[r] || 0) >= a;
+  });
+}
+
+function upgradeBuilding(buildingId) {
+  const bld = buildings.find(b => b.id === buildingId);
+  if (!canUpgrade(buildingId)) return;
+  const def = BUILDING_DEFS[bld.type];
+  const nextLvl = def.levels[bld.level + 1];
+  for (const [r, a] of Object.entries(nextLvl.cost)) {
+    if (r === 'gold') gold -= a;
+    else resources[r] -= a;
+  }
+  bld.upgrading = true;
+  bld.buildProgress = 0;
+  bld.buildTarget = nextLvl.buildTime;
+  notify('Upgrading ' + def.name + '...', '#4fc3f7');
+}
+
+function demolish(buildingId) {
+  const idx = buildings.findIndex(b => b.id === buildingId);
+  if (idx === -1) return;
+  const bld = buildings[idx];
+  const def = BUILDING_DEFS[bld.type];
+  const lvl = def.levels[bld.level];
+  // Refund 50%
+  for (const [r, a] of Object.entries(lvl.cost)) {
+    if (r === 'gold') {
+      gold += Math.floor(a * 0.5);
+    } else {
+      resources[r] = Math.min(storageCap[r], (resources[r] || 0) + Math.floor(a * 0.5));
+    }
+  }
+  // Return workers
+  idleWorkers += bld.workers;
+  buildings.splice(idx, 1);
+  applyBuildingEffects();
+  recalcTerritory();
+  notify(def.name + ' demolished', '#ff9800');
+}
+
+function assignWorker(buildingId) {
+  const bld = buildings.find(b => b.id === buildingId);
+  if (!bld || !bld.built) return;
+  const def = BUILDING_DEFS[bld.type];
+  if (bld.workers >= def.workers) return;
+  if (idleWorkers <= 0) return;
+  bld.workers++;
+  idleWorkers--;
+}
+
+function unassignWorker(buildingId) {
+  const bld = buildings.find(b => b.id === buildingId);
+  if (!bld || bld.workers <= 0) return;
+  bld.workers--;
+  idleWorkers++;
+}
+
+function recalcWorkers() {
+  let totalAssigned = 0;
+  for (const bld of buildings) totalAssigned += bld.workers;
+  idleWorkers = Math.max(0, population - totalAssigned);
+}
+
+// -----------------------------------------------
+//  BUILDING INFO OVERLAY
+// -----------------------------------------------
+function showBuildingInfo(buildingId) {
+  const bld = buildings.find(b => b.id === buildingId);
+  if (!bld) return;
+  const def = BUILDING_DEFS[bld.type];
+  const lvl = def.levels[bld.level];
+  let html = '<div style="text-align:center;font-family:sans-serif;max-width:350px">';
+  html += '<h3 style="color:#f0c040;margin:0 0 6px">' + def.name + ' (Lv ' + (bld.level + 1) + ')</h3>';
+  if (!bld.built) {
+    const status = bld.upgrading ? 'Upgrading' : 'Under construction';
+    html += '<p style="color:#ffa726;font-size:11px">' + status + ': ' + bld.buildProgress + '/' + bld.buildTarget + '</p>';
+  } else {
+    if (lvl.production) {
+      html += '<p style="color:#aaa;font-size:11px">Produces: ' + Object.entries(lvl.production).map(([r,a]) => a + ' ' + (RESOURCE_DEFS[r] ? RESOURCE_DEFS[r].name : r)).join(', ') + '/turn</p>';
+    }
+    if (lvl.popCap) {
+      html += '<p style="color:#aaa;font-size:11px">Population capacity: +' + lvl.popCap + '</p>';
+    }
+    if (lvl.storageCap) {
+      html += '<p style="color:#aaa;font-size:11px">Storage: +' + lvl.storageCap + ' all resources</p>';
+    }
+    if (lvl.visionRange) {
+      html += '<p style="color:#aaa;font-size:11px">Vision range: ' + lvl.visionRange + '</p>';
+    }
+    if (lvl.healRate) {
+      html += '<p style="color:#aaa;font-size:11px">Heal rate: ' + lvl.healRate + '/turn</p>';
+    }
+    if (lvl.researchSpeed) {
+      html += '<p style="color:#aaa;font-size:11px">Research speed: +' + lvl.researchSpeed + '</p>';
+    }
+    if (lvl.moraleBonus) {
+      html += '<p style="color:#aaa;font-size:11px">Morale bonus: +' + lvl.moraleBonus + '</p>';
+    }
+    if (lvl.toolBonus) {
+      html += '<p style="color:#aaa;font-size:11px">Tool bonus: +' + lvl.toolBonus + '</p>';
+    }
+    if (lvl.tradeRatio) {
+      html += '<p style="color:#aaa;font-size:11px">Trade ratio: ' + lvl.tradeRatio + ':1</p>';
+    }
+    if (def.workers > 0) {
+      html += '<p style="color:#aaa;font-size:11px">Workers: ' + bld.workers + '/' + def.workers + ' (Idle: ' + idleWorkers + ')</p>';
+      html += '<button onclick="assignWorker(' + bld.id + ');showBuildingInfo(' + bld.id + ')" style="font-size:10px;padding:2px 6px">+Worker</button> ';
+      html += '<button onclick="unassignWorker(' + bld.id + ');showBuildingInfo(' + bld.id + ')" style="font-size:10px;padding:2px 6px">-Worker</button>';
+    }
+    if (canUpgrade(buildingId)) {
+      const nextLvl = def.levels[bld.level + 1];
+      const costStr = Object.entries(nextLvl.cost).map(([r,a]) => a + ' ' + (RESOURCE_DEFS[r] ? RESOURCE_DEFS[r].icon : r)).join(', ');
+      html += '<br><button onclick="upgradeBuilding(' + bld.id + ');showBuildingInfo(' + bld.id + ')" style="font-size:10px;padding:3px 8px;margin-top:4px">Upgrade (' + costStr + ')</button>';
+    } else if (bld.level < def.levels.length - 1) {
+      const nextLvl = def.levels[bld.level + 1];
+      const costStr = Object.entries(nextLvl.cost).map(([r,a]) => a + ' ' + (RESOURCE_DEFS[r] ? RESOURCE_DEFS[r].icon : r)).join(', ');
+      html += '<br><span style="font-size:10px;color:#777;margin-top:4px">Next: ' + costStr + '</span>';
+    } else {
+      html += '<br><span style="font-size:10px;color:#4caf50;margin-top:4px">MAX LEVEL</span>';
+    }
+    html += '<br><button onclick="demolish(' + bld.id + ');document.getElementById(\'overlay\').classList.remove(\'show\')" style="font-size:10px;padding:2px 6px;margin-top:4px;color:#f44336">Demolish</button>';
+  }
+  html += '<br><button onclick="document.getElementById(\'overlay\').classList.remove(\'show\')" style="margin-top:6px;padding:4px 16px">Close</button>';
+  html += '</div>';
+  document.getElementById('overlayTitle').textContent = '';
+  document.getElementById('overlayMsg').innerHTML = html;
+  document.getElementById('overlayBtn').style.display = 'none';
+  document.getElementById('overlayInput').style.display = 'none';
+  document.getElementById('overlay').classList.add('show');
+  overlayCallback = () => { document.getElementById('overlayBtn').style.display = ''; document.getElementById('overlayMsg').innerHTML = ''; };
+}
+
+// -----------------------------------------------
+//  TRADE FUNCTIONS (market-based)
+// -----------------------------------------------
+function showTradeMenu() {
+  if (gameMode !== 'overworld') return;
+  // Find best market trade ratio
+  let bestRatio = 5; // default without market
+  for (const bld of buildings) {
+    if (bld.type === 'market' && bld.built && bld.workers > 0) {
+      const lvl = BUILDING_DEFS.market.levels[bld.level];
+      if (lvl.tradeRatio && lvl.tradeRatio < bestRatio) bestRatio = lvl.tradeRatio;
+    }
+  }
+  const hasMarket = buildings.some(b => b.type === 'market' && b.built && b.workers > 0);
+  if (!hasMarket) { msg('Build and staff a Market to trade resources'); return; }
+
+  let html = '<div style="text-align:center;font-family:sans-serif;max-width:450px">';
+  html += '<h3 style="color:#f0c040;margin:0 0 8px">TRADE</h3>';
+  html += '<p style="color:#aaa;font-size:10px">Trade ratio: ' + bestRatio + ':1 (sell ' + bestRatio + ' to get 1)</p>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin-top:6px">';
+
+  const tradeable = ['wood', 'stone', 'iron', 'crops', 'meat'];
+  for (const from of tradeable) {
+    for (const to of tradeable) {
+      if (from === to) continue;
+      const canTrade = (resources[from] || 0) >= bestRatio;
+      html += '<button onclick="executeTrade(\'' + from + '\',\'' + to + '\',' + bestRatio + ')" style="font-size:9px;padding:2px 6px;opacity:' + (canTrade ? '1' : '0.3') + '">';
+      html += bestRatio + ' ' + RESOURCE_DEFS[from].icon + ' -> 1 ' + RESOURCE_DEFS[to].icon;
+      html += '</button>';
+    }
+  }
+  // Sell resources for gold
+  for (const from of tradeable) {
+    const canSell = (resources[from] || 0) >= bestRatio;
+    html += '<button onclick="executeTradeSellGold(\'' + from + '\',' + bestRatio + ')" style="font-size:9px;padding:2px 6px;opacity:' + (canSell ? '1' : '0.3') + ';color:#ffd54f">';
+    html += bestRatio + ' ' + RESOURCE_DEFS[from].icon + ' -> 1 G';
+    html += '</button>';
+  }
+
+  html += '</div>';
+  html += '<button onclick="document.getElementById(\'overlay\').classList.remove(\'show\')" style="margin-top:8px;padding:4px 16px">Close</button>';
+  html += '</div>';
+  document.getElementById('overlayTitle').textContent = '';
+  document.getElementById('overlayMsg').innerHTML = html;
+  document.getElementById('overlayBtn').style.display = 'none';
+  document.getElementById('overlayInput').style.display = 'none';
+  document.getElementById('overlay').classList.add('show');
+  overlayCallback = () => { document.getElementById('overlayBtn').style.display = ''; document.getElementById('overlayMsg').innerHTML = ''; };
+}
+
+function executeTrade(from, to, ratio) {
+  if ((resources[from] || 0) < ratio) { msg('Not enough ' + RESOURCE_DEFS[from].name); return; }
+  resources[from] -= ratio;
+  resources[to] = Math.min(storageCap[to], (resources[to] || 0) + 1);
+  spawnFloatingText(player.x, player.y, '-' + ratio + ' ' + RESOURCE_DEFS[from].icon + ' +1 ' + RESOURCE_DEFS[to].icon, '#ffd54f');
+  showTradeMenu(); // Refresh
+  updateHUD();
+}
+
+function executeTradeSellGold(from, ratio) {
+  if ((resources[from] || 0) < ratio) { msg('Not enough ' + RESOURCE_DEFS[from].name); return; }
+  resources[from] -= ratio;
+  gold += 1;
+  spawnFloatingText(player.x, player.y, '-' + ratio + ' ' + RESOURCE_DEFS[from].icon + ' +1 G', '#ffd54f');
+  showTradeMenu(); // Refresh
+  updateHUD();
+}
+
+// -----------------------------------------------
+//  RESEARCH MENU
+// -----------------------------------------------
+function showResearchMenu() {
+  if (gameMode !== 'overworld') return;
+  let html = '<div style="text-align:center;font-family:sans-serif;max-width:400px">';
+  html += '<h3 style="color:#4fc3f7;margin:0 0 8px">RESEARCH</h3>';
+
+  // Check for academy
+  const hasAcademy = buildings.some(b => b.type === 'academy' && b.built);
+  if (!hasAcademy) {
+    html += '<p style="color:#ff9800;font-size:11px">Build an Academy to research technologies!</p>';
+  }
+
+  if (currentResearch) {
+    const tech = TECH_TREE[currentResearch.key];
+    const pct = Math.floor((currentResearch.progress / currentResearch.target) * 100);
+    html += '<p style="color:#ffa726;font-size:11px">Researching: ' + tech.name + ' (' + Math.floor(currentResearch.progress) + '/' + currentResearch.target + ') ' + pct + '%</p>';
+  }
+
+  for (const [key, tech] of Object.entries(TECH_TREE)) {
+    if (researched[key]) {
+      html += '<div style="margin:3px 0;font-size:11px;color:#4caf50">&#10003; ' + tech.name + ' - ' + tech.effect + '</div>';
+      continue;
+    }
+    const reqs = tech.requires || [];
+    const reqsMet = reqs.every(r => researched[r]);
+    const costStr = Object.entries(tech.cost).map(([r,a]) => a + ' ' + (RESOURCE_DEFS[r] ? RESOURCE_DEFS[r].icon : r)).join(', ');
+    const canAfford = Object.entries(tech.cost).every(([r,a]) => {
+      if (r === 'gold') return gold >= a;
+      return (resources[r] || 0) >= a;
+    });
+    const canStart = reqsMet && canAfford && !currentResearch && hasAcademy;
+    html += '<div style="margin:3px 0;font-size:11px;opacity:' + (canStart ? '1' : '0.5') + '">';
+    html += tech.name + ' (' + costStr + ', ' + tech.time + ' turns)';
+    if (canStart) html += ' <button onclick="startResearch(\'' + key + '\');showResearchMenu()" style="font-size:9px;padding:1px 6px">Start</button>';
+    if (!reqsMet && reqs.length > 0) html += ' <span style="color:#f44336;font-size:9px">Requires: ' + reqs.map(r => TECH_TREE[r].name).join(', ') + '</span>';
+    html += '</div>';
+  }
+  html += '<button onclick="document.getElementById(\'overlay\').classList.remove(\'show\')" style="margin-top:8px;padding:4px 16px">Close</button>';
+  html += '</div>';
+  document.getElementById('overlayTitle').textContent = '';
+  document.getElementById('overlayMsg').innerHTML = html;
+  document.getElementById('overlayBtn').style.display = 'none';
+  document.getElementById('overlayInput').style.display = 'none';
+  document.getElementById('overlay').classList.add('show');
+  overlayCallback = () => { document.getElementById('overlayBtn').style.display = ''; document.getElementById('overlayMsg').innerHTML = ''; };
+}
+
+function startResearch(techKey) {
+  const tech = TECH_TREE[techKey];
+  if (!tech || researched[techKey] || currentResearch) return;
+  const reqs = tech.requires || [];
+  if (!reqs.every(r => researched[r])) return;
+  const hasAcademy = buildings.some(b => b.type === 'academy' && b.built);
+  if (!hasAcademy) return;
+  // Check and deduct cost
+  for (const [r, a] of Object.entries(tech.cost)) {
+    if (r === 'gold') {
+      if (gold < a) return;
+    } else {
+      if ((resources[r] || 0) < a) return;
+    }
+  }
+  for (const [r, a] of Object.entries(tech.cost)) {
+    if (r === 'gold') gold -= a;
+    else resources[r] -= a;
+  }
+  currentResearch = { key: techKey, progress: 0, target: tech.time };
+  notify('Researching ' + tech.name + '...', '#4fc3f7');
+}
+
+// -----------------------------------------------
+//  SETTLEMENT INFO OVERLAY
+// -----------------------------------------------
+function showSettlementInfo() {
+  if (gameMode !== 'overworld') return;
+  const food = calcFoodProduction();
+  const foodNeeded = Math.ceil(population / 4);
+  let html = '<div style="text-align:center;font-family:sans-serif;max-width:400px">';
+  html += '<h3 style="color:#f0c040;margin:0 0 8px">KINGDOM OF ' + (playerName || 'Unknown').toUpperCase() + '</h3>';
+  html += '<div style="font-size:11px;color:#ccc;text-align:left;padding:0 20px">';
+  html += '<p>Population: ' + population + '/' + popCap + ' (Idle: ' + idleWorkers + ')</p>';
+  html += '<p>Food: ' + food + '/turn (Need: ' + foodNeeded + ')</p>';
+  html += '<p>Castles: ' + playerForts.length + ' | Buildings: ' + buildings.filter(b => b.built).length + '</p>';
+  html += '<p>Army Power: ' + armyPower(player.army) + '</p>';
+  html += '<p>Army: ' + armySummary(player.army) + '</p>';
+  html += '<p>Gold Income: +' + goldPerTurn + '/turn</p>';
+  html += '<p>Turn: ' + turnCount + ' | Kills: ' + kills + '</p>';
+  for (const r of RESOURCES) {
+    html += '<p style="color:' + RESOURCE_DEFS[r].color + '">' + RESOURCE_DEFS[r].name + ': ' + (resources[r] || 0) + '/' + storageCap[r] + '</p>';
+  }
+  // Research status
+  if (currentResearch) {
+    const tech = TECH_TREE[currentResearch.key];
+    html += '<p style="color:#4fc3f7">Researching: ' + tech.name + ' (' + Math.floor(currentResearch.progress) + '/' + currentResearch.target + ')</p>';
+  }
+  // Building list
+  if (buildings.length > 0) {
+    html += '<p style="margin-top:6px;color:#ff9800"><b>Buildings:</b></p>';
+    for (const bld of buildings) {
+      const def = BUILDING_DEFS[bld.type];
+      const status = bld.built ? (bld.upgrading ? 'Upgrading' : 'Active') : 'Building';
+      html += '<p style="font-size:10px;color:#aaa">' + def.name + ' Lv' + (bld.level + 1) + ' [' + status + '] W:' + bld.workers + '/' + def.workers + '</p>';
+    }
+  }
+  // Researched techs
+  const researchedKeys = Object.keys(researched).filter(k => researched[k]);
+  if (researchedKeys.length > 0) {
+    html += '<p style="margin-top:6px;color:#4fc3f7"><b>Technologies:</b></p>';
+    for (const rk of researchedKeys) {
+      html += '<p style="font-size:10px;color:#4caf50">' + TECH_TREE[rk].name + '</p>';
+    }
+  }
+  html += '</div>';
+  html += '<div style="margin-top:6px;display:flex;gap:4px;justify-content:center">';
+  html += '<button onclick="showTradeMenu()" style="padding:4px 12px;font-size:11px">Trade</button>';
+  html += '<button onclick="document.getElementById(\'overlay\').classList.remove(\'show\')" style="padding:4px 16px">Close</button>';
+  html += '</div>';
+  html += '</div>';
+  document.getElementById('overlayTitle').textContent = '';
+  document.getElementById('overlayMsg').innerHTML = html;
+  document.getElementById('overlayBtn').style.display = 'none';
+  document.getElementById('overlayInput').style.display = 'none';
+  document.getElementById('overlay').classList.add('show');
+  overlayCallback = () => { document.getElementById('overlayBtn').style.display = ''; document.getElementById('overlayMsg').innerHTML = ''; };
+}
+
+// -----------------------------------------------
+//  ENEMY AI STUBS (overworld enemies don't actively move)
+// -----------------------------------------------
+function moveEnemies() {
+  // Enemies do not actively move on the overworld.
+  // Their positions are static; tension timer spawns new threats.
+}
+
+function enemyArcherAttacks() {
+  // Enemy archers do not attack on overworld; handled in tactical battle.
+}
+
+// -----------------------------------------------
+//  SAVE / LOAD SYSTEM
+// -----------------------------------------------
+const SAVE_KEY = 'conquerers_saves';
+const MAX_SLOTS = 5;
+
+function getSaves() {
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; }
+  catch { return {}; }
+}
+
+function saveGame(slot) {
+  if (!player) return;
+  const saves = getSaves();
+  saves['slot' + slot] = {
+    playerName,
+    gold,
+    kills,
+    morale,
+    turnCount,
+    scouted,
+    playerX: player.x,
+    playerY: player.y,
+    army: {},
+    upgrades: { ...upgrades },
+    recruitedEngineers,
+    engineerATKBonus,
+    playerForts: playerForts.map(f => ({
+      gx: f.gx, gy: f.gy,
+      garrison: (() => { const g = {}; for (const t of TROOP_ORDER) g[t] = Array.isArray(f.garrison[t]) ? f.garrison[t].map(u => ({ ...u })) : []; return g; })(),
+      walls: f.walls, turrets: f.turrets, mines: f.mines, isHome: f.isHome
+    })),
+    goldPerTurn,
+    enemies: enemies.map(e => ({ x: e.x, y: e.y, str: e.str, type: e.type, patrol: e.patrol, charged: e.charged })),
+    forts: forts.map(f => ({ x: f.x, y: f.y, str: f.str, garrisoned: f.garrisoned || false })),
+    allies: allies.slice(),
+    chests: chests.slice(),
+    mercCamps: mercCamps.slice(),
+    overworldEngineers: overworldEngineers.slice(),
+    walls: [...walls],
+    // Settlers merged state
+    resources: { ...resources },
+    storageCap: { ...storageCap },
+    population,
+    popCap,
+    idleWorkers,
+    buildings: buildings.map(b => ({ ...b })),
+    nextBuildingId,
+    researched: { ...researched },
+    currentResearch: currentResearch ? { ...currentResearch } : null,
+    // Chunk data
+    chunkKeys: Object.keys(chunks),
+    grassMap: (() => {
+      const out = {};
+      for (const ck of Object.keys(chunks)) {
+        const [cx, cy] = ck.split(',').map(Number);
+        const baseX = cx * CHUNK_SIZE, baseY = cy * CHUNK_SIZE;
+        for (let y = baseY; y < baseY + CHUNK_SIZE; y++) {
+          for (let x = baseX; x < baseX + CHUNK_SIZE; x++) {
+            if (grassMap[y] && grassMap[y][x] !== undefined) {
+              if (!out[y]) out[y] = {};
+              out[y][x] = grassMap[y][x];
+            }
+          }
+        }
+      }
+      return out;
+    })(),
+    treeMap: (() => {
+      const out = {};
+      for (const ck of Object.keys(chunks)) {
+        const [cx, cy] = ck.split(',').map(Number);
+        const baseX = cx * CHUNK_SIZE, baseY = cy * CHUNK_SIZE;
+        for (let y = baseY; y < baseY + CHUNK_SIZE; y++) {
+          for (let x = baseX; x < baseX + CHUNK_SIZE; x++) {
+            if (treeMap[y] && treeMap[y][x] !== undefined) {
+              if (!out[y]) out[y] = {};
+              out[y][x] = treeMap[y][x];
+            }
+          }
+        }
+      }
+      return out;
+    })(),
+    waterMap: (() => {
+      const out = {};
+      for (const ck of Object.keys(chunks)) {
+        const [cx, cy] = ck.split(',').map(Number);
+        const baseX = cx * CHUNK_SIZE, baseY = cy * CHUNK_SIZE;
+        for (let y = baseY; y < baseY + CHUNK_SIZE; y++) {
+          for (let x = baseX; x < baseX + CHUNK_SIZE; x++) {
+            if (waterMap[y] && waterMap[y][x] !== undefined) {
+              if (!out[y]) out[y] = {};
+              out[y][x] = waterMap[y][x];
+            }
+          }
+        }
+      }
+      return out;
+    })(),
+    pathMap: (() => {
+      const out = {};
+      for (const ck of Object.keys(chunks)) {
+        const [cx, cy] = ck.split(',').map(Number);
+        const baseX = cx * CHUNK_SIZE, baseY = cy * CHUNK_SIZE;
+        for (let y = baseY; y < baseY + CHUNK_SIZE; y++) {
+          for (let x = baseX; x < baseX + CHUNK_SIZE; x++) {
+            if (pathMap[y] && pathMap[y][x]) {
+              if (!out[y]) out[y] = {};
+              out[y][x] = pathMap[y][x];
+            }
+          }
+        }
+      }
+      return out;
+    })(),
+    fogMap: (() => {
+      const out = {};
+      for (const ck of Object.keys(chunks)) {
+        const [cx, cy] = ck.split(',').map(Number);
+        const baseX = cx * CHUNK_SIZE, baseY = cy * CHUNK_SIZE;
+        for (let y = baseY; y < baseY + CHUNK_SIZE; y++) {
+          for (let x = baseX; x < baseX + CHUNK_SIZE; x++) {
+            if (fogMap[y] && fogMap[y][x] !== undefined) {
+              if (!out[y]) out[y] = {};
+              out[y][x] = fogMap[y][x];
+            }
+          }
+        }
+      }
+      return out;
+    })(),
+    timestamp: Date.now(),
+  };
+  // Save player army as arrays of unit objects
+  for (const t of TROOP_ORDER) {
+    saves['slot' + slot].army[t] = Array.isArray(player.army[t]) ? player.army[t].map(u => ({ ...u })) : [];
+  }
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(saves));
+    msg('Game saved to slot ' + slot + '!');
+    notify('Game saved!', '#4caf50');
+  } catch (e) {
+    msg('Save failed: storage full');
+    notify('Save failed!', '#ef5350');
+  }
+}
+
+function loadGame(slot) {
+  const saves = getSaves();
+  const data = saves['slot' + slot];
+  if (!data) { msg('No save in slot ' + slot); return; }
+
+  playerName = data.playerName || 'Lord';
+  gold = data.gold || 0;
+  kills = data.kills || 0;
+  morale = data.morale || 0;
+  turnCount = data.turnCount || 0;
+  scouted = data.scouted || false;
+  upgrades = data.upgrades || { armorPiercing: 0, extendedMag: 0, reinforced: 0, explosiveRounds: 0 };
+  recruitedEngineers = data.recruitedEngineers || 0;
+  engineerATKBonus = data.engineerATKBonus || 0;
+  goldPerTurn = data.goldPerTurn || 0;
+
+  // Restore walls
+  walls = new Set(data.walls || []);
+
+  // Restore map data from saved sparse objects
+  grassMap = []; treeMap = []; waterMap = []; pathMap = []; fogMap = [];
+  chunks = {};
+
+  if (data.chunkKeys) {
+    for (const ck of data.chunkKeys) {
+      const [cx, cy] = ck.split(',').map(Number);
+      chunks[ck] = { generated: true, cx, cy };
+      const baseX = cx * CHUNK_SIZE, baseY = cy * CHUNK_SIZE;
+      for (let y = baseY; y < baseY + CHUNK_SIZE; y++) {
+        if (!grassMap[y]) grassMap[y] = [];
+        if (!treeMap[y]) treeMap[y] = [];
+        if (!waterMap[y]) waterMap[y] = [];
+        if (!pathMap[y]) pathMap[y] = [];
+        if (!fogMap[y]) fogMap[y] = [];
+        for (let x = baseX; x < baseX + CHUNK_SIZE; x++) {
+          grassMap[y][x] = (data.grassMap && data.grassMap[y] && data.grassMap[y][x] !== undefined) ? data.grassMap[y][x] : noise(x, y);
+          treeMap[y][x] = (data.treeMap && data.treeMap[y] && data.treeMap[y][x] !== undefined) ? data.treeMap[y][x] : false;
+          waterMap[y][x] = (data.waterMap && data.waterMap[y] && data.waterMap[y][x] !== undefined) ? data.waterMap[y][x] : false;
+          pathMap[y][x] = (data.pathMap && data.pathMap[y] && data.pathMap[y][x]) ? data.pathMap[y][x] : false;
+          fogMap[y][x] = (data.fogMap && data.fogMap[y] && data.fogMap[y][x] !== undefined) ? data.fogMap[y][x] : 0;
+        }
+      }
+    }
+  }
+
+  // Restore entities
+  enemies = (data.enemies || []).map(e => ({ ...e, arrowCooldown: 0, vx: e.x, vy: e.y }));
+  forts = (data.forts || []).map(f => ({ ...f }));
+  allies = (data.allies || []).slice();
+  chests = (data.chests || []).slice();
+  mercCamps = (data.mercCamps || []).slice();
+  overworldEngineers = (data.overworldEngineers || []).slice();
+
+  // Restore player castles with garrisons
+  playerForts = (data.playerForts || []).map(f => {
+    const garrison = newArmy();
+    if (f.garrison) {
+      for (const t of TROOP_ORDER) {
+        if (Array.isArray(f.garrison[t])) {
+          garrison[t] = f.garrison[t].map(u => ({ ...u }));
+        }
+      }
+    }
+    return { gx: f.gx, gy: f.gy, garrison, walls: f.walls || 0, turrets: f.turrets || 0, mines: f.mines || 0, isHome: f.isHome || false };
+  });
+
+  // Restore settlers state
+  resources = data.resources || { wood: 30, stone: 20, iron: 0, gold: 0, meat: 5, crops: 10 };
+  storageCap = data.storageCap || { wood: 100, stone: 100, iron: 50, gold: 200, meat: 50, crops: 80 };
+  population = data.population || 4;
+  popCap = data.popCap || 4;
+  idleWorkers = data.idleWorkers || 4;
+  buildings = (data.buildings || []).map(b => ({ ...b }));
+  nextBuildingId = data.nextBuildingId || 1;
+  researched = data.researched || {};
+  currentResearch = data.currentResearch ? { ...data.currentResearch } : null;
+
+  // Restore player army
+  const army = newArmy();
+  if (data.army) {
+    for (const t of TROOP_ORDER) {
+      if (Array.isArray(data.army[t])) {
+        army[t] = data.army[t].map(u => ({ ...u }));
+      }
+    }
+  }
+
+  // Init world with loaded data (isLoad=true)
+  initWorld(army, true);
+  player.x = data.playerX || 128;
+  player.y = data.playerY || 128;
+  playerVisual = { x: player.x, y: player.y };
+  camX = player.x;
+  camY = player.y;
+
+  initEnemyVisuals();
+  recalcTerritory();
+  applyBuildingEffects();
+  dimFog();
+  updateBlacksmithButtons();
+  minimapDirty = true;
+  msg('Game loaded from slot ' + slot + '!');
+  notify('Game loaded!', '#4caf50');
+  updateHUD();
+  draw();
+}
+
+function deleteSave(slot) {
+  const saves = getSaves();
+  delete saves['slot' + slot];
+  localStorage.setItem(SAVE_KEY, JSON.stringify(saves));
+  showSaveLoadUI(); // Refresh UI
+}
+
+function autoSave() {
+  saveGame(0);
+}
+
+function showSaveLoadUI() {
+  const saves = getSaves();
+  let html = '<div style="text-align:center;font-family:sans-serif;max-width:400px">';
+  html += '<h3 style="color:#f0c040;margin:0 0 8px">SAVE / LOAD</h3>';
+
+  for (let i = 0; i < MAX_SLOTS; i++) {
+    const data = saves['slot' + i];
+    const label = i === 0 ? 'Auto-Save' : 'Slot ' + i;
+    html += '<div style="margin:4px 0;padding:4px;background:rgba(255,255,255,0.05);border-radius:4px">';
+    if (data) {
+      const date = new Date(data.timestamp);
+      const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+      const castles = (data.playerForts || []).length;
+      html += '<span style="font-size:11px;color:#ccc">' + label + ': ' + (data.playerName || 'Lord') + ' | Turn ' + (data.turnCount || 0) + ' | Castles: ' + castles + ' | ' + dateStr + '</span>';
+      html += '<br>';
+      html += '<button onclick="loadGame(' + i + ');document.getElementById(\'overlay\').classList.remove(\'show\')" style="font-size:10px;padding:2px 8px;margin:2px">Load</button>';
+      if (i > 0) html += '<button onclick="saveGame(' + i + ');showSaveLoadUI()" style="font-size:10px;padding:2px 8px;margin:2px">Overwrite</button>';
+      if (i > 0) html += '<button onclick="deleteSave(' + i + ')" style="font-size:10px;padding:2px 8px;margin:2px;color:#ef5350">Delete</button>';
+    } else {
+      html += '<span style="font-size:11px;color:#666">' + label + ': Empty</span>';
+      if (i > 0) html += ' <button onclick="saveGame(' + i + ');showSaveLoadUI()" style="font-size:10px;padding:2px 8px;margin:2px">Save</button>';
+    }
+    html += '</div>';
+  }
+
+  html += '<button onclick="document.getElementById(\'overlay\').classList.remove(\'show\')" style="margin-top:8px;padding:4px 16px">Close</button>';
+  html += '</div>';
+  document.getElementById('overlayTitle').textContent = '';
+  document.getElementById('overlayMsg').innerHTML = html;
+  document.getElementById('overlayBtn').style.display = 'none';
+  document.getElementById('overlayInput').style.display = 'none';
+  document.getElementById('overlay').classList.add('show');
+  overlayCallback = () => { document.getElementById('overlayBtn').style.display = ''; document.getElementById('overlayMsg').innerHTML = ''; };
+}

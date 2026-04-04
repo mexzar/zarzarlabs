@@ -1,0 +1,360 @@
+// ===============================================
+//  PART 6: GAME LOOP, INPUT, HUD, STARTUP
+// ===============================================
+
+// Variable for milestone tracking (not declared in earlier parts)
+let castlesCaptured = 0;
+
+// -----------------------------------------------
+//  UPDATE HUD
+// -----------------------------------------------
+function updateHUD() {
+  const pw = armyPower(player.army);
+  const bon = armyBonus(player.army);
+
+  const nameEl = document.getElementById('nameVal');
+  if (nameEl) nameEl.textContent = playerName || 'Lord';
+
+  const armyEl = document.getElementById('armyVal');
+  if (armyEl) armyEl.textContent = pw + (bon > 0 ? ' [+' + bon + ']' : '');
+
+  const castlesEl = document.getElementById('castlesVal');
+  if (castlesEl) castlesEl.textContent = forts.length;
+
+  const goldEl = document.getElementById('goldVal');
+  if (goldEl) goldEl.textContent = gold;
+
+  // Resources
+  const woodEl = document.getElementById('woodVal');
+  if (woodEl) woodEl.textContent = Math.floor(resources.wood || 0);
+  const stoneEl = document.getElementById('stoneVal');
+  if (stoneEl) stoneEl.textContent = Math.floor(resources.stone || 0);
+  const ironEl = document.getElementById('ironVal');
+  if (ironEl) ironEl.textContent = Math.floor(resources.iron || 0);
+  const cropsEl = document.getElementById('cropsVal');
+  if (cropsEl) cropsEl.textContent = Math.floor(resources.crops || 0);
+  const meatEl = document.getElementById('meatVal');
+  if (meatEl) meatEl.textContent = Math.floor(resources.meat || 0);
+
+  // Population
+  const popEl = document.getElementById('popVal');
+  if (popEl) popEl.textContent = population + '/' + popCap + ' (Idle: ' + idleWorkers + ')';
+
+  // Kills
+  const killsEl = document.getElementById('killsVal');
+  if (killsEl) killsEl.textContent = kills;
+
+  // Morale
+  const moraleEl = document.getElementById('moraleVal');
+  if (moraleEl) {
+    moraleEl.textContent = (morale > 0 ? '+' : '') + morale;
+    moraleEl.style.color = morale > 0 ? '#4caf50' : (morale < 0 ? '#f44336' : '#888');
+  }
+
+  // Smiths (engineers)
+  const engEl = document.getElementById('engVal');
+  if (engEl) engEl.textContent = recruitedEngineers + (engineerATKBonus > 0 ? ' (+' + engineerATKBonus + ' ATK)' : '');
+
+  // Income
+  const incEl = document.getElementById('incomeVal');
+  if (incEl) incEl.textContent = goldPerTurn > 0 ? '+' + goldPerTurn + '/turn' : 'none';
+
+  // Update shop buttons with scaled prices
+  for (const btn of document.querySelectorAll('#shop button')) {
+    const onclick = btn.getAttribute('onclick') || '';
+    const type = (onclick.match(/shopBuy\('(\w+)'\)/) || [])[1];
+    if (type && TROOP_TYPES[type]) {
+      const def = TROOP_TYPES[type];
+      const cost = shopCost(type);
+      btn.disabled = gold < cost;
+      btn.textContent = def.name + ' x' + def.qty + ' (' + cost + 'g)';
+    }
+    if (onclick.includes('shopHealAll')) {
+      const cost = healCost();
+      btn.disabled = gold < cost;
+      btn.textContent = 'Heal All (' + cost + 'g)';
+    }
+    if (onclick.includes('shopScout')) {
+      btn.disabled = gold < 15 || scouted;
+    }
+  }
+
+  // Update blacksmith / upgrade buttons
+  updateBlacksmithButtons();
+}
+
+// -----------------------------------------------
+//  SMOOTH UPDATE (overworld)
+// -----------------------------------------------
+function updateSmooth() {
+  // Update camera
+  updateCamera();
+
+  // Smooth player position
+  const spd = MOVE_SPEED;
+  playerVisual.x += (player.x - playerVisual.x) * spd;
+  playerVisual.y += (player.y - playerVisual.y) * spd;
+  // Snap when close enough
+  if (Math.abs(player.x - playerVisual.x) < 0.01 && Math.abs(player.y - playerVisual.y) < 0.01) {
+    playerVisual.x = player.x;
+    playerVisual.y = player.y;
+  }
+
+  // Smooth enemy positions
+  for (const e of enemies) {
+    if (e.vx === undefined) { e.vx = e.x; e.vy = e.y; }
+    e.vx += (e.x - e.vx) * spd;
+    e.vy += (e.y - e.vy) * spd;
+    if (Math.abs(e.x - e.vx) < 0.01 && Math.abs(e.y - e.vy) < 0.01) {
+      e.vx = e.x; e.vy = e.y;
+    }
+  }
+
+  // Smooth follower positions
+  for (let i = 0; i < followerTrail.length; i++) {
+    if (!followerVisuals[i]) followerVisuals[i] = { x: followerTrail[i].x, y: followerTrail[i].y };
+    const fv = followerVisuals[i];
+    const ft = followerTrail[i];
+    fv.x += (ft.x - fv.x) * (spd * 0.7);
+    fv.y += (ft.y - fv.y) * (spd * 0.7);
+    if (Math.abs(ft.x - fv.x) < 0.01 && Math.abs(ft.y - fv.y) < 0.01) {
+      fv.x = ft.x; fv.y = ft.y;
+    }
+  }
+
+  // Smooth shake decay
+  if (shake > 0) shake *= 0.88;
+  if (shake < 0.3) shake = 0;
+
+  // Check if player animation is done, process next queued move
+  const animDone = Math.abs(player.x - playerVisual.x) < 0.15 && Math.abs(player.y - playerVisual.y) < 0.15;
+  if (isAnimating && animDone) {
+    isAnimating = false;
+    if (moveQueue.length > 0) {
+      const next = moveQueue.shift();
+      tryMove(next.dx, next.dy);
+    }
+  }
+}
+
+// -----------------------------------------------
+//  GAME LOOP
+// -----------------------------------------------
+function gameLoop() {
+  animFrame++;
+
+  // Smith (engineer) passive crafting timer (every 5 min per smith -> +1 ATK, cap 10)
+  if (recruitedEngineers > 0 && engineerATKBonus < 10) {
+    engineerTimer++;
+    const interval = Math.floor(18000 / recruitedEngineers); // 5 min / num smiths
+    if (engineerTimer >= interval) {
+      engineerTimer = 0;
+      engineerATKBonus = Math.min(10, engineerATKBonus + 1);
+      if (gameMode === 'overworld') {
+        spawnFloatingText(player.x, player.y, 'SMITH +1 ATK', '#ff9800');
+        msg('Smiths forged a weapon upgrade! (ATK +' + engineerATKBonus + ')');
+        updateHUD();
+      }
+    }
+  }
+
+  try {
+    if (gameMode === 'overworld') {
+      updateSmooth();
+      draw();
+    } else {
+      updateBattleSmooth();
+      drawBattle();
+    }
+  } catch (err) {
+    console.error('Game loop error:', err);
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+// -----------------------------------------------
+//  KEYBOARD INPUT
+// -----------------------------------------------
+document.addEventListener('keydown', e => {
+  if (document.getElementById('overlay').classList.contains('show')) return;
+
+  if (gameMode === 'overworld') {
+    switch (e.key) {
+      case 'ArrowUp': case 'w': case 'W':
+        e.preventDefault(); tryMove(0, -1); break;
+      case 'ArrowDown': case 's': case 'S':
+        e.preventDefault(); tryMove(0, 1); break;
+      case 'ArrowLeft': case 'a': case 'A':
+        e.preventDefault(); tryMove(-1, 0); break;
+      case 'ArrowRight': case 'd': case 'D':
+        e.preventDefault(); tryMove(1, 0); break;
+      case 'Escape':
+        if (buildMode) {
+          buildMode = false;
+          buildSelected = null;
+          buildGhost = null;
+          msg('');
+        }
+        break;
+      case 'b': case 'B':
+        toggleBuildMenu();
+        break;
+      case 'h': case 'H':
+        harvest();
+        break;
+    }
+  } else if (gameMode === 'battle') {
+    if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); battle.simPaused = !battle.simPaused; }
+    if (e.key === '1') { battle.simSpeed = 1; battle.simPaused = false; }
+    if (e.key === '2') { battle.simSpeed = 2; battle.simPaused = false; }
+    if (e.key === '3') { battle.simSpeed = 4; battle.simPaused = false; }
+  } else if (gameMode === 'deploy') {
+    if (e.key === 'Escape') { e.preventDefault(); cancelDeploy(); }
+  }
+});
+
+// -----------------------------------------------
+//  MOUSE / CLICK INPUT
+// -----------------------------------------------
+canvas.addEventListener('mousemove', e => {
+  if (!buildMode) return;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width, scaleY = H / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+  const grid = fromIso(mx, my);
+  buildGhost = { gx: grid.x, gy: grid.y };
+});
+
+canvas.addEventListener('click', e => {
+  if (document.getElementById('overlay').classList.contains('show')) return;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width, scaleY = H / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+
+  if (gameMode === 'overworld') {
+    if (my >= H - PANEL_H) return;
+    const grid = fromIso(mx, my);
+    // No COLS/ROWS bounds check (infinite map)
+    if (!grassMap[grid.y] || grassMap[grid.y][grid.x] === undefined) return;
+
+    // Build placement (stays in build mode until ESC or B or can't afford)
+    if (buildMode && buildSelected) {
+      if (canBuild(buildSelected, grid.x, grid.y)) {
+        placeBuilding(buildSelected, grid.x, grid.y);
+        updateHUD();
+        // Check if can still afford another
+        const def = BUILDING_DEFS[buildSelected];
+        const canStillAfford = def && Object.entries(def.levels[0].cost).every(([r, a]) => (resources[r] || 0) >= a);
+        if (!canStillAfford) {
+          buildMode = false;
+          buildSelected = null;
+          buildGhost = null;
+          msg('');
+        }
+      } else {
+        msg('Cannot build here!');
+      }
+      return;
+    }
+
+    // Check if clicking on own building
+    const clickedBld = buildings.find(b => b.gx === grid.x && b.gy === grid.y && b.built);
+    if (clickedBld) {
+      showBuildingInfo(clickedBld.id);
+      return;
+    }
+
+    // Click to move toward that tile
+    const dx = Math.sign(grid.x - player.x), dy = Math.sign(grid.y - player.y);
+    if (dx === 0 && dy === 0) return;
+    if (Math.abs(grid.x - player.x) >= Math.abs(grid.y - player.y)) tryMove(dx, 0);
+    else tryMove(0, dy);
+
+  } else if (gameMode === 'deploy') {
+    handleDeployClick(mx, my);
+  } else if (gameMode === 'battle') {
+    handleBattleClick(mx, my);
+  } else if (gameMode === 'battle_result') {
+    handleResultClick();
+  }
+});
+
+// -----------------------------------------------
+//  MILESTONE / VICTORY SYSTEM
+// -----------------------------------------------
+function checkMilestones() {
+  const milestones = [5, 10, 25, 50, 100];
+  for (const m of milestones) {
+    if (castlesCaptured === m) {
+      showOverlay('MILESTONE!', 'You have captured ' + m + ' castles! Your kingdom grows, my Lord!', 'Continue', () => {
+        document.getElementById('overlay').classList.remove('show');
+      }, false);
+      break;
+    }
+  }
+}
+
+function declareVictory() {
+  showOverlay('VICTORY!', 'Lord ' + playerName + ' has conquered the realm with ' + castlesCaptured + ' castles, ' + kills + ' kills, and a kingdom of ' + buildings.length + ' buildings!', 'New Game', () => {
+    document.getElementById('overlay').classList.remove('show');
+    showStartScreen();
+  }, false);
+}
+
+// -----------------------------------------------
+//  RESTART GAME
+// -----------------------------------------------
+function restartGame() {
+  showOverlay('RESTART', 'Are you sure? Unsaved progress will be lost.', 'Restart', () => {
+    document.getElementById('overlay').classList.remove('show');
+    castlesCaptured = 0;
+    showStartScreen();
+  }, false);
+}
+
+// -----------------------------------------------
+//  START SCREEN
+// -----------------------------------------------
+function showStartScreen() {
+  const saves = getSaves();
+  const hasSaves = Object.keys(saves).length > 0;
+
+  if (hasSaves) {
+    let html = '<div style="text-align:center;font-family:sans-serif;">';
+    html += '<p style="color:#aaa;margin:4px 0">Welcome, my Lord!</p>';
+    html += '<button onclick="showSaveLoadUI()" style="padding:6px 16px;margin:4px;font-size:13px">Load Kingdom</button>';
+    html += '<button onclick="document.getElementById(\'overlay\').classList.remove(\'show\');showOverlay(\'CONQUERERS\',\'Enter your name, my Lord.\',\'Begin\',()=>newGame(),true)" style="padding:6px 16px;margin:4px;font-size:13px">New Kingdom</button>';
+    html += '</div>';
+    document.getElementById('overlayTitle').textContent = 'CONQUERERS';
+    document.getElementById('overlayTitle').style.color = '#f0c040';
+    document.getElementById('overlayMsg').innerHTML = html;
+    document.getElementById('overlayBtn').style.display = 'none';
+    document.getElementById('overlayInput').style.display = 'none';
+    document.getElementById('overlay').classList.add('show');
+    overlayCallback = () => {
+      document.getElementById('overlayBtn').style.display = '';
+      document.getElementById('overlayMsg').innerHTML = '';
+    };
+  } else {
+    showOverlay('CONQUERERS', 'Enter your name, my Lord.', 'Begin', () => newGame(), true);
+    document.getElementById('overlayTitle').style.color = '#f0c040';
+  }
+}
+
+// -----------------------------------------------
+//  OVERLAY INPUT ENTER KEY
+// -----------------------------------------------
+document.getElementById('overlayInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); overlayAction(); }
+});
+
+// -----------------------------------------------
+//  INITIAL STARTUP
+// -----------------------------------------------
+showStartScreen();
+gameLoop();
+</script>
+</body>
+</html>

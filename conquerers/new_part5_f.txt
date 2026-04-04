@@ -1,0 +1,381 @@
+// ===============================================
+//  drawBattleProjectile - Medieval projectile rendering
+// ===============================================
+function drawBattleProjectile(p) {
+  const piso = toBattleIso(p.x, p.y);
+  const sx = piso.x, sy = piso.y;
+  const alpha = Math.min(1, p.life / 10);
+  ctx.globalAlpha = alpha;
+
+  if (p.type === 'arrow') {
+    // Wooden shaft with fletching, arc trajectory
+    const dx = p.tx - p.x, dy = p.ty - p.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const nx = dx / len, ny = dy / len;
+    const tiso = toBattleIso(p.x + nx * 0.3, p.y + ny * 0.3);
+    // Shaft
+    ctx.strokeStyle = '#8d6e63'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(sx, sy - 8); ctx.lineTo(tiso.x, tiso.y - 8); ctx.stroke();
+    // Arrowhead
+    ctx.fillStyle = '#bbb';
+    ctx.beginPath();
+    ctx.moveTo(tiso.x, tiso.y - 10);
+    ctx.lineTo(tiso.x + 2, tiso.y - 8);
+    ctx.lineTo(tiso.x, tiso.y - 6);
+    ctx.closePath();
+    ctx.fill();
+    // Fletching
+    ctx.fillStyle = '#eee';
+    ctx.beginPath();
+    ctx.moveTo(sx, sy - 10);
+    ctx.lineTo(sx - 2, sy - 8);
+    ctx.lineTo(sx, sy - 6);
+    ctx.closePath();
+    ctx.fill();
+  } else if (p.type === 'bolt') {
+    // Short thick crossbow bolt with trail
+    const dx = p.tx - p.x, dy = p.ty - p.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    ctx.strokeStyle = '#b0bec5'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(sx, sy - 8);
+    ctx.lineTo(sx - (dx / len) * 4, sy - 8 - (dy / len) * 4);
+    ctx.stroke();
+    // Bolt tip
+    ctx.fillStyle = '#ddd';
+    ctx.beginPath(); ctx.arc(sx, sy - 8, 1.5, 0, Math.PI * 2); ctx.fill();
+  } else if (p.type === 'stone') {
+    // Large rock with parabolic arc, shadow, dust
+    const progress = 1 - (p.life / 120);
+    const arcHeight = Math.sin(progress * Math.PI) * 35;
+    // Shadow on ground
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath(); ctx.ellipse(sx, sy + 2, 4, 2, 0, 0, Math.PI * 2); ctx.fill();
+    // Stone
+    ctx.fillStyle = '#777';
+    ctx.beginPath(); ctx.arc(sx, sy - 8 - arcHeight, 4.5, 0, Math.PI * 2); ctx.fill();
+    // Stone detail
+    ctx.fillStyle = '#999';
+    ctx.beginPath(); ctx.arc(sx - 1, sy - 9 - arcHeight, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#666';
+    ctx.beginPath(); ctx.arc(sx + 1.5, sy - 7 - arcHeight, 1.5, 0, Math.PI * 2); ctx.fill();
+    // Dust trail
+    if (progress > 0.1) {
+      ctx.fillStyle = 'rgba(139,110,99,0.3)';
+      ctx.beginPath(); ctx.arc(sx - 3, sy - 6 - arcHeight * 0.5, 2, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (p.type === 'fire') {
+    // Flaming projectile with fire trail and embers (Greek fire)
+    ctx.fillStyle = '#ff9800';
+    ctx.beginPath(); ctx.arc(sx, sy - 8, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffeb3b';
+    ctx.beginPath(); ctx.arc(sx, sy - 8, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(sx, sy - 8, 1, 0, Math.PI * 2); ctx.fill();
+    // Fire trail embers
+    ctx.fillStyle = 'rgba(255,152,0,0.5)';
+    ctx.beginPath(); ctx.arc(sx - 2 + Math.random() * 4, sy - 6 + Math.random() * 2, 1, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx - 3 + Math.random() * 6, sy - 5 + Math.random() * 2, 0.8, 0, Math.PI * 2); ctx.fill();
+  } else if (p.type === 'heal') {
+    // Golden sparkle swirl with cross
+    const tu = p.targetUnit;
+    const tiso = toBattleIso(tu && tu.hp > 0 ? tu.vx : p.tx, tu && tu.hp > 0 ? tu.vy : p.ty);
+    // Golden beam
+    ctx.strokeStyle = '#ffd54f'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(sx, sy - 8); ctx.lineTo(tiso.x, tiso.y - 8); ctx.stroke();
+    // Sparkles along beam
+    const midX = (sx + tiso.x) / 2, midY = (sy + tiso.y) / 2;
+    ctx.fillStyle = '#fff8e1';
+    ctx.beginPath(); ctx.arc(midX + (Math.random()-0.5)*4, midY - 8 + (Math.random()-0.5)*4, 1.5 + Math.random(), 0, Math.PI * 2); ctx.fill();
+    // Cross symbol at source
+    ctx.fillStyle = '#ffd54f';
+    ctx.fillRect(sx - 1, sy - 11, 2, 5);
+    ctx.fillRect(sx - 3, sy - 9, 6, 2);
+    // Golden glow at target
+    ctx.fillStyle = 'rgba(255,213,79,0.3)';
+    ctx.beginPath(); ctx.arc(tiso.x, tiso.y - 8, 5 + Math.random() * 2, 0, Math.PI * 2); ctx.fill();
+  } else if (p.type === 'dagger') {
+    // Spinning thrown dagger
+    const spin = animFrame * 0.4;
+    ctx.save();
+    ctx.translate(sx, sy - 8);
+    ctx.rotate(spin);
+    // Blade
+    ctx.fillStyle = '#bbb';
+    ctx.beginPath();
+    ctx.moveTo(0, -4);
+    ctx.lineTo(2, 0);
+    ctx.lineTo(0, 4);
+    ctx.lineTo(-1, 0);
+    ctx.closePath();
+    ctx.fill();
+    // Handle
+    ctx.fillStyle = '#333';
+    ctx.fillRect(-1.5, -1.5, 1.5, 3);
+    ctx.restore();
+    // Trail shimmer
+    ctx.fillStyle = 'rgba(171,71,188,0.3)';
+    ctx.beginPath(); ctx.arc(sx - 2, sy - 8, 2, 0, Math.PI * 2); ctx.fill();
+  } else if (p.type === 'cannonball') {
+    // Bronze ball with smoke trail
+    // Smoke trail
+    ctx.fillStyle = 'rgba(100,100,100,0.35)';
+    ctx.beginPath(); ctx.arc(sx - 3, sy - 7, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(80,80,80,0.2)';
+    ctx.beginPath(); ctx.arc(sx - 5, sy - 6, 2, 0, Math.PI * 2); ctx.fill();
+    // Bronze cannonball
+    ctx.fillStyle = '#cd7f32';
+    ctx.beginPath(); ctx.arc(sx, sy - 8, 3.5, 0, Math.PI * 2); ctx.fill();
+    // Highlight
+    ctx.fillStyle = '#daa520';
+    ctx.beginPath(); ctx.arc(sx - 1, sy - 9, 1.5, 0, Math.PI * 2); ctx.fill();
+    // Sparks
+    ctx.fillStyle = 'rgba(255,200,0,0.4)';
+    ctx.beginPath(); ctx.arc(sx + 2 + Math.random() * 2, sy - 7, 1, 0, Math.PI * 2); ctx.fill();
+  } else if (p.type === 'magic_bolt') {
+    // Purple energy ball with particles
+    ctx.fillStyle = '#ce93d8';
+    ctx.beginPath(); ctx.arc(sx, sy - 8, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e1bee7';
+    ctx.beginPath(); ctx.arc(sx, sy - 8, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#f3e5f5';
+    ctx.beginPath(); ctx.arc(sx, sy - 8, 0.8, 0, Math.PI * 2); ctx.fill();
+    // Arcane particles orbiting
+    const orb = animFrame * 0.15;
+    ctx.fillStyle = 'rgba(206,147,216,0.5)';
+    ctx.beginPath(); ctx.arc(sx + Math.cos(orb) * 5, sy - 8 + Math.sin(orb) * 3, 1.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx + Math.cos(orb + Math.PI) * 5, sy - 8 + Math.sin(orb + Math.PI) * 3, 1, 0, Math.PI * 2); ctx.fill();
+  } else if (p.type === 'melee_slash') {
+    // Sword swing arc effect
+    const slashAngle = animFrame * 0.3;
+    ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(sx, sy - 8, 6, slashAngle, slashAngle + Math.PI * 0.7);
+    ctx.stroke();
+    // Metallic flash
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.beginPath(); ctx.arc(sx + Math.cos(slashAngle + 0.35) * 6, sy - 8 + Math.sin(slashAngle + 0.35) * 6, 2, 0, Math.PI * 2); ctx.fill();
+    // Sparks
+    ctx.fillStyle = 'rgba(255,255,200,0.4)';
+    ctx.beginPath(); ctx.arc(sx + (Math.random()-0.5)*6, sy - 8 + (Math.random()-0.5)*4, 1, 0, Math.PI * 2); ctx.fill();
+  } else if (p.type === 'pike_thrust') {
+    // Forward thrust visual
+    const dx = p.tx - p.x, dy = p.ty - p.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    // Pike shaft
+    ctx.strokeStyle = '#5d4037'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(sx, sy - 8);
+    ctx.lineTo(sx + (dx / len) * 8, sy - 8 + (dy / len) * 8);
+    ctx.stroke();
+    // Pike head
+    ctx.fillStyle = '#bbb';
+    const tipX = sx + (dx / len) * 8, tipY = sy - 8 + (dy / len) * 8;
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY - 2);
+    ctx.lineTo(tipX + (dx / len) * 4, tipY + (dy / len) * 4);
+    ctx.lineTo(tipX, tipY + 2);
+    ctx.closePath();
+    ctx.fill();
+    // Thrust flash
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath(); ctx.arc(tipX, tipY, 3, 0, Math.PI * 2); ctx.fill();
+  } else if (p.type === 'lance_charge') {
+    // Cavalry charge effect
+    const dx = p.tx - p.x, dy = p.ty - p.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    // Charge dust cloud
+    ctx.fillStyle = 'rgba(139,110,99,0.3)';
+    ctx.beginPath(); ctx.arc(sx - 4, sy - 4, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx - 2, sy - 2, 3, 0, Math.PI * 2); ctx.fill();
+    // Lance
+    ctx.strokeStyle = '#5d4037'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(sx, sy - 8);
+    ctx.lineTo(sx + (dx / len) * 10, sy - 8 + (dy / len) * 10);
+    ctx.stroke();
+    // Lance tip
+    ctx.fillStyle = '#ccc';
+    const ltX = sx + (dx / len) * 10, ltY = sy - 8 + (dy / len) * 10;
+    ctx.beginPath();
+    ctx.moveTo(ltX - 1.5, ltY - 1.5);
+    ctx.lineTo(ltX + (dx / len) * 4, ltY + (dy / len) * 4);
+    ctx.lineTo(ltX + 1.5, ltY + 1.5);
+    ctx.closePath();
+    ctx.fill();
+    // Impact flash
+    ctx.fillStyle = 'rgba(255,255,200,0.4)';
+    ctx.beginPath(); ctx.arc(ltX, ltY, 4, 0, Math.PI * 2); ctx.fill();
+  } else if (p.type === 'axe_throw') {
+    // Spinning axe (for raiders)
+    const spin = animFrame * 0.35;
+    ctx.save();
+    ctx.translate(sx, sy - 8);
+    ctx.rotate(spin);
+    // Handle
+    ctx.fillStyle = '#5d4037';
+    ctx.fillRect(-1, -5, 2, 10);
+    // Axe head
+    ctx.fillStyle = '#78909c';
+    ctx.beginPath();
+    ctx.moveTo(1, -4);
+    ctx.lineTo(5, -6);
+    ctx.lineTo(5, -1);
+    ctx.lineTo(1, -1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  } else if (p.type === 'elephant_charge') {
+    // Ground shake effect
+    // Dust clouds
+    ctx.fillStyle = 'rgba(139,110,99,0.5)';
+    ctx.beginPath(); ctx.arc(sx - 4, sy - 2, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx + 3, sy, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx - 2, sy - 6, 3, 0, Math.PI * 2); ctx.fill();
+    // Shockwave ring
+    const shakeR = (1 - p.life / 120) * 12;
+    ctx.strokeStyle = 'rgba(139,110,99,0.4)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(sx, sy - 4, shakeR, 0, Math.PI * 2); ctx.stroke();
+    // Ground cracks
+    ctx.strokeStyle = 'rgba(80,60,40,0.4)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(sx, sy - 4); ctx.lineTo(sx + 6, sy - 8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx, sy - 4); ctx.lineTo(sx - 5, sy + 1); ctx.stroke();
+  } else if (p.type === 'dragon_fire') {
+    // Fire breath stream
+    const dx = p.tx - p.x, dy = p.ty - p.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    // Main fire stream
+    ctx.fillStyle = '#ff5722';
+    ctx.beginPath(); ctx.arc(sx, sy - 8, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ff9800';
+    ctx.beginPath(); ctx.arc(sx, sy - 8, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffeb3b';
+    ctx.beginPath(); ctx.arc(sx, sy - 8, 2, 0, Math.PI * 2); ctx.fill();
+    // Fire embers around
+    for (let ei = 0; ei < 3; ei++) {
+      ctx.fillStyle = 'rgba(255,87,34,' + (0.3 + Math.random() * 0.3) + ')';
+      ctx.beginPath(); ctx.arc(sx + (Math.random()-0.5)*8, sy - 8 + (Math.random()-0.5)*6, 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+    // Smoke wisps
+    ctx.fillStyle = 'rgba(60,60,60,0.2)';
+    ctx.beginPath(); ctx.arc(sx - 3, sy - 12, 2, 0, Math.PI * 2); ctx.fill();
+  } else {
+    // Default arrow fallback
+    const dx = p.tx - p.x, dy = p.ty - p.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    ctx.strokeStyle = p.color || '#a1887f'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy - 8);
+    ctx.lineTo(sx - (dx / len) * 4, sy - 8 - (dy / len) * 4);
+    ctx.stroke();
+  }
+}
+
+// ===============================================
+//  drawDeployPanel - Medieval unit selection panel
+// ===============================================
+function drawDeployPanel() {
+  const panelY = H - PANEL_H;
+  const panelGrad = ctx.createLinearGradient(0, panelY, 0, panelY + PANEL_H);
+  panelGrad.addColorStop(0, '#1a1810'); panelGrad.addColorStop(1, '#0e0c08');
+  ctx.fillStyle = panelGrad;
+  ctx.fillRect(0, panelY, W, PANEL_H);
+  ctx.fillStyle = '#5a4a2a'; ctx.fillRect(0, panelY, W, 1);
+
+  const slotW = W / TROOP_ORDER.length;
+  for (let i = 0; i < TROOP_ORDER.length; i++) {
+    const type = TROOP_ORDER[i];
+    const td = TROOP_TYPES[type];
+    const count = Array.isArray(battle.deployArmy[type]) ? battle.deployArmy[type].length : 0;
+    const cx = slotW * i + slotW / 2;
+    const cy = panelY + PANEL_H / 2;
+
+    // Selected highlight
+    if (deploySelectedType === type) {
+      ctx.fillStyle = 'rgba(79,195,247,0.15)';
+      ctx.fillRect(slotW * i, panelY + 2, slotW, PANEL_H - 2);
+      ctx.strokeStyle = '#4fc3f7'; ctx.lineWidth = 1;
+      ctx.strokeRect(slotW * i + 1, panelY + 3, slotW - 2, PANEL_H - 4);
+    }
+
+    // Draw mini troop
+    drawMiniTroop(slotW * i + 18, cy - 6, type, td);
+
+    // Count
+    ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = count > 0 ? td.color : '#555';
+    ctx.fillText(count, cx + 15, cy - 4);
+
+    // Name
+    ctx.font = '8px sans-serif'; ctx.fillStyle = '#8899aa';
+    ctx.fillText(td.name, cx, cy + 16);
+
+    // Divider
+    if (i < TROOP_ORDER.length - 1) {
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fillRect(slotW * (i + 1), panelY + 6, 1, PANEL_H - 12);
+    }
+  }
+}
+
+// ===============================================
+//  drawBattleInfoPanel
+// ===============================================
+function drawBattleInfoPanel() {
+  const panelY = H - PANEL_H;
+  const panelGrad = ctx.createLinearGradient(0, panelY, 0, panelY + PANEL_H);
+  panelGrad.addColorStop(0, '#1a1810'); panelGrad.addColorStop(1, '#0e0c08');
+  ctx.fillStyle = panelGrad;
+  ctx.fillRect(0, panelY, W, PANEL_H);
+  ctx.fillStyle = '#5a4a2a'; ctx.fillRect(0, panelY, W, 1);
+
+  ctx.textAlign = 'left';
+  const pAlive = battle.playerUnits.filter(u => u.hp > 0).length;
+  const eAlive = battle.enemyUnits.filter(u => u.hp > 0).length;
+  ctx.font = '11px sans-serif'; ctx.fillStyle = '#4fc3f7';
+  ctx.fillText('Your Host: ' + pAlive + '/' + battle.playerUnits.length, 15, panelY + 18);
+  ctx.fillStyle = '#ff5252';
+  ctx.fillText('Enemy Force: ' + eAlive + '/' + battle.enemyUnits.length, 15, panelY + 35);
+
+  // Total HP bars
+  const pHP = battle.playerUnits.reduce((s, u) => s + Math.max(0, u.hp), 0);
+  const pMaxHP = battle.playerUnits.reduce((s, u) => s + u.maxHp, 0);
+  const eHP = battle.enemyUnits.reduce((s, u) => s + Math.max(0, u.hp), 0);
+  const eMaxHP = battle.enemyUnits.reduce((s, u) => s + u.maxHp, 0);
+  const barX = 150, barW = 120, barH = 6;
+  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(barX, panelY + 12, barW, barH);
+  ctx.fillStyle = '#4fc3f7'; ctx.fillRect(barX, panelY + 12, barW * (pMaxHP > 0 ? pHP / pMaxHP : 0), barH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 0.5; ctx.strokeRect(barX, panelY + 12, barW, barH);
+  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(barX, panelY + 29, barW, barH);
+  ctx.fillStyle = '#ff5252'; ctx.fillRect(barX, panelY + 29, barW * (eMaxHP > 0 ? eHP / eMaxHP : 0), barH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.strokeRect(barX, panelY + 29, barW, barH);
+
+  // Morale
+  ctx.textAlign = 'center'; ctx.font = '10px sans-serif';
+  const moralePct = Math.round(morale * 8);
+  const moraleColor = morale > 0 ? '#4caf50' : (morale < 0 ? '#f44336' : '#888');
+  ctx.fillStyle = moraleColor;
+  ctx.fillText('Morale: ' + (morale > 0 ? '+' : '') + morale +
+    (morale !== 0 ? ' (' + (moralePct > 0 ? '+' : '') + moralePct + '% DMG)' : ''), W / 2 + 100, panelY + 25);
+
+  // Speed info
+  ctx.textAlign = 'right'; ctx.font = '11px sans-serif'; ctx.fillStyle = '#8899aa';
+  ctx.fillText('Speed: ' + battle.simSpeed + 'x' +
+    (battle.simPaused ? '  PAUSED' : ''), W - 15, panelY + 25);
+  ctx.textAlign = 'left';
+}
+
+// ===============================================
+//  drawBattleResultPanel
+// ===============================================
+function drawBattleResultPanel() {
+  const panelY = H - PANEL_H;
+  ctx.fillStyle = '#0e0c08';
+  ctx.fillRect(0, panelY, W, PANEL_H);
+  ctx.fillStyle = '#5a4a2a'; ctx.fillRect(0, panelY, W, 1);
+
+  const lines = battle.resultMsg.split('\n');
+  ctx.textAlign = 'center';
+  for (let i = 0; i < lines.length; i++) {
+    ctx.font = i === 0 ? 'bold 14px sans-serif' : '11px sans-serif';
+    ctx.fillStyle = i === 0 ? (battle.resultMsg.startsWith('VICTORY') ? '#4caf50' : '#ff5252') : '#aabbcc';
+    ctx.fillText(lines[i], W / 2, panelY + 15 + i * 14);
+  }
+}

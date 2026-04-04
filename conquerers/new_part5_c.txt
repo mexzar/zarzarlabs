@@ -1,0 +1,250 @@
+// ===============================================
+//  BATTLE VICTORY & DEFEAT
+// ===============================================
+function battleVictory() {
+  const ctx2 = battle.enemyContext;
+  const def = ctx2.isFort ? ENEMY_TYPES.bandit : ENEMY_TYPES[ctx2.type];
+
+  // Return units to army: survivors keep HP, dead respawn at 50% max, then all heal 50% missing
+  for (const t of TROOP_ORDER) {
+    if (!Array.isArray(player.army[t])) player.army[t] = [];
+    const maxHp = BATTLE_STATS[t].hp + upgrades.reinforced * 3;
+    for (const u of battle.playerUnits) {
+      if (u.type === t) player.army[t].push(u.hp);
+    }
+    const deployed = (battle.deployedSnapshot[t] || []).length;
+    const survived = battle.playerUnits.filter(u => u.type === t).length;
+    const dead = deployed - survived;
+    for (let i = 0; i < dead; i++) player.army[t].push(Math.ceil(maxHp * 0.5));
+    for (let i = 0; i < player.army[t].length; i++) {
+      const hp = player.army[t][i];
+      player.army[t][i] = Math.min(maxHp, hp + Math.ceil((maxHp - hp) * 0.5));
+    }
+  }
+
+  // Morale boost
+  morale = Math.min(5, morale + 1);
+
+  // Rewards
+  const goldReward = Math.floor(ctx2.str * (def.goldMul || 0.3)) + randInt(2, 6);
+  gold += goldReward;
+  kills++;
+
+  let capturedText = '';
+  if (!ctx2.isFort) {
+    const yieldType = def.yields || 'militia';
+    const yieldDef = TROOP_TYPES[yieldType];
+    const captureRate = Math.max(0.2, 0.4 - getDifficulty() * 0.02);
+    const capturedCount = Math.max(1, Math.ceil(ctx2.str * captureRate / yieldDef.str));
+    addTroops(player.army, yieldType, capturedCount);
+    capturedText = '+' + capturedCount + ' ' + yieldDef.name;
+    const eIdx = ctx2.arr.indexOf(ctx2.arr[ctx2.index]);
+    if (eIdx !== -1) ctx2.arr.splice(eIdx, 1);
+  } else {
+    // Castle capture - convert to player castle
+    const maCount = Math.max(1, Math.ceil(ctx2.str * 0.15 / TROOP_TYPES.menatarms.str));
+    const milCount = Math.max(1, Math.ceil(ctx2.str * 0.1 / TROOP_TYPES.militia.str));
+    addTroops(player.army, 'menatarms', maCount);
+    addTroops(player.army, 'militia', milCount);
+    capturedText = '+' + maCount + ' Men-at-Arms, +' + milCount + ' Militia\nCastle Captured!';
+    const capturedFort = forts[ctx2.index];
+    playerForts.push({ gx: capturedFort.x, gy: capturedFort.y, garrison: newArmy(), walls: 0, turrets: 0, mines: 0, isHome: false });
+    forts.splice(ctx2.index, 1);
+    recalcTerritory();
+  }
+
+  battle.resultMsg = 'VICTORY!\nYour forces are victorious, my Lord!\n+' + goldReward + ' gold\n' + capturedText +
+    '\nAll troops recovered  Morale: ' + (morale > 0 ? '+' : '') + morale;
+  gameMode = 'battle_result';
+
+  spawnParticles(player.x, player.y, '#4fc3f7', 20, 5);
+  updateHUD();
+
+  if (forts.length === 0) {
+    setTimeout(() => { checkGameWin(); }, 500);
+  }
+}
+
+function battleDefeat() {
+  const ctx2 = battle.enemyContext;
+
+  morale = Math.max(-5, morale - 1);
+
+  for (const t of TROOP_ORDER) {
+    if (!Array.isArray(player.army[t])) player.army[t] = [];
+    const maxHp = BATTLE_STATS[t].hp + upgrades.reinforced * 3;
+    for (const u of battle.playerUnits) {
+      if (u.type === t) player.army[t].push(u.hp);
+    }
+    const deployed = (battle.deployedSnapshot[t] || []).length;
+    const survived = battle.playerUnits.filter(u => u.type === t).length;
+    const dead = deployed - survived;
+    for (let i = 0; i < dead; i++) player.army[t].push(Math.ceil(maxHp * 0.5));
+    for (let i = 0; i < player.army[t].length; i++) {
+      const hp = player.army[t][i];
+      player.army[t][i] = Math.min(maxHp, hp + Math.ceil((maxHp - hp) * 0.5));
+    }
+  }
+
+  const totalEnemyHp = battle.enemyUnits.reduce((s, u) => s + u.maxHp, 0);
+  const remainingHp = battle.enemyUnits.reduce((s, u) => s + u.hp, 0);
+  const dmgFraction = 1 - (remainingHp / totalEnemyHp);
+  if (!ctx2.isFort) {
+    const e = ctx2.arr[ctx2.index];
+    if (e) e.str = Math.max(1, Math.ceil(e.str * (1 - dmgFraction)));
+  }
+
+  // Check if we lost a castle defense
+  if (battle.turretBonus !== undefined) {
+    const defFort = playerForts.findIndex(f => f.gx === player.x && f.gy === player.y);
+    if (defFort !== -1) {
+      const lostFort = playerForts[defFort];
+      spawnFloatingText(lostFort.gx, lostFort.gy, 'Castle Lost!', '#f44336');
+      playerForts.splice(defFort, 1);
+      recalcTerritory();
+    }
+  }
+  pendingAttacks = pendingAttacks.filter(pa => !playerForts[pa.fortIndex] || playerForts[pa.fortIndex].gx !== player.x);
+
+  player.x = Math.max(1, Math.min(COLS - 2, player.x - player.lastDx));
+  player.y = Math.max(1, Math.min(ROWS - 2, player.y - player.lastDy));
+  playerVisual.x = player.x;
+  playerVisual.y = player.y;
+
+  let defeatMsg = 'DEFEAT!\nYour forces have fallen back, my Lord.\nYour troops regroup and recover.\nMorale: ' + (morale > 0 ? '+' : '') + morale;
+  if (battle.turretBonus !== undefined) defeatMsg += '\nThe castle has been overrun by the enemy!';
+  battle.resultMsg = defeatMsg;
+  gameMode = 'battle_result';
+  shake = 6;
+  updateHUD();
+}
+
+function handleResultClick() {
+  gameMode = 'overworld';
+  battle = null;
+}
+
+// ===============================================
+//  DEPLOY PHASE INPUT
+// ===============================================
+function handleDeployClick(mx, my) {
+  const panelY = H - PANEL_H;
+
+  if (my >= panelY) {
+    const slotW = W / TROOP_ORDER.length;
+    const slotIdx = Math.floor(mx / slotW);
+    if (slotIdx >= 0 && slotIdx < TROOP_ORDER.length) {
+      const type = TROOP_ORDER[slotIdx];
+      if (battle.deployArmy[type] && battle.deployArmy[type].length > 0) {
+        deploySelectedType = type;
+      }
+    }
+    return;
+  }
+
+  if (mx >= W - 160 && mx <= W - 10 && my >= 10 && my <= 45 && battle.playerUnits.length > 0) {
+    startBattle();
+    return;
+  }
+
+  const grid = fromBattleIso(mx, my);
+  const gx = Math.round(grid.x * 2) / 2;
+  const gy = Math.round(grid.y * 2) / 2;
+  if (gx < 0 || gx >= BCOLS || gy < 0 || gy >= BROWS) return;
+
+  const existIdx = battle.playerUnits.findIndex(u => getEuclidDist(u, {x:gx,y:gy}) < 0.6);
+  if (existIdx !== -1) {
+    const removed = battle.playerUnits.splice(existIdx, 1)[0];
+    if (!Array.isArray(battle.deployArmy[removed.type])) battle.deployArmy[removed.type] = [];
+    battle.deployArmy[removed.type].push(removed.persistentHp || removed.maxHp);
+    return;
+  }
+
+  if (gx < 3 && deploySelectedType && battle.deployArmy[deploySelectedType] && battle.deployArmy[deploySelectedType].length > 0) {
+    const gy2 = Math.floor(gy);
+    if (gy2 >= 0 && gy2 < BROWS && battle.grid[gy2] && battle.grid[gy2][Math.floor(gx)] === 'wall') return;
+    if (battle.playerUnits.some(u => getEuclidDist(u, {x:gx,y:gy}) < 0.5)) return;
+
+    const stats = BATTLE_STATS[deploySelectedType];
+    const persistHp = battle.deployArmy[deploySelectedType].pop();
+    const baseMaxHp = stats.hp + upgrades.reinforced * 3;
+    const unitHp = Math.min(persistHp, baseMaxHp);
+    battle.playerUnits.push({
+      type: deploySelectedType,
+      hp: unitHp, maxHp: baseMaxHp, persistentHp: persistHp,
+      atk: stats.atk + upgrades.armorPiercing + engineerATKBonus,
+      range: stats.range + upgrades.extendedMag,
+      aoe: stats.aoe + (['pikemen','crossbowmen','catapults'].includes(deploySelectedType) ? upgrades.explosiveRounds : 0),
+      heavy: false,
+      x: gx, y: gy, vx: gx, vy: gy,
+      moveSpeed: stats.moveSpeed, attackRate: stats.attackRate, attackCD: 0,
+    });
+    if (battle.deployArmy[deploySelectedType].length <= 0) deploySelectedType = null;
+  }
+}
+
+// ===============================================
+//  BATTLE PHASE INPUT (Simulation Controls)
+// ===============================================
+function handleBattleClick(mx, my) {
+  if (mx >= W - 155 && mx <= W - 100 && my >= 10 && my <= 38) {
+    battle.simPaused = !battle.simPaused;
+    return;
+  }
+  if (mx >= W - 95 && mx <= W - 70 && my >= 10 && my <= 38) {
+    battle.simSpeed = 1; battle.simPaused = false;
+    return;
+  }
+  if (mx >= W - 65 && mx <= W - 40 && my >= 10 && my <= 38) {
+    battle.simSpeed = 2; battle.simPaused = false;
+    return;
+  }
+  if (mx >= W - 35 && mx <= W - 10 && my >= 10 && my <= 38) {
+    battle.simSpeed = 4; battle.simPaused = false;
+    return;
+  }
+}
+
+// ===============================================
+//  BATTLE SMOOTH ANIMATION
+// ===============================================
+function updateBattleSmooth() {
+  if (!battle) return;
+  const spd = 0.25;
+
+  const _allUnits = battle.playerUnits.concat(battle.enemyUnits);
+  for (const u of _allUnits) {
+    if (u.vx === undefined) { u.vx = u.x; u.vy = u.y; }
+    u.vx += (u.x - u.vx) * spd;
+    u.vy += (u.y - u.vy) * spd;
+    if (Math.abs(u.x - u.vx) < 0.01) u.vx = u.x;
+    if (Math.abs(u.y - u.vy) < 0.01) u.vy = u.y;
+  }
+
+  for (let i = battleParticles.length - 1; i >= 0; i--) {
+    const p = battleParticles[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.15;
+    p.vx *= 0.97;
+    p.life--;
+    if (p.life <= 0) battleParticles.splice(i, 1);
+  }
+
+  for (let i = battleFloatingTexts.length - 1; i >= 0; i--) {
+    const ft = battleFloatingTexts[i];
+    ft.y -= 0.6;
+    ft.life--;
+    if (ft.life <= 0) battleFloatingTexts.splice(i, 1);
+  }
+
+  if (shake > 0) shake *= 0.88;
+  if (shake < 0.3) shake = 0;
+
+  if (gameMode === 'battle') {
+    const steps = battle.simSpeed || 1;
+    for (let s = 0; s < steps; s++) {
+      updateRealTimeBattle();
+      updateProjectiles();
+    }
+  }
+}
