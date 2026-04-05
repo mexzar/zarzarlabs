@@ -906,7 +906,7 @@ function updatePlayer(dt) {
 
   // Update goat visual
   goatGroup.position.copy(playerPos);
-  goatGroup.rotation.y = playerRot;
+  goatGroup.rotation.y = playerRot + Math.PI;
 
   // Walk animation
   if (moveDir.lengthSq() > 0) {
@@ -1996,7 +1996,7 @@ function updateVehicles(dt) {
       playerPos.copy(v.group.position).add(new THREE.Vector3(0, 1.5, 0));
       goatGroup.position.copy(v.group.position);
       goatGroup.position.y = VEHICLE_TYPES[v.type].size[1] + 0.3;
-      goatGroup.rotation.y = v.rot;
+      goatGroup.rotation.y = v.rot + Math.PI;
 
       // Mutation vehicle scaling
       const vScaleTarget = activeMutation === 4 ? 3.5 : activeMutation === 3 ? 0.5 : 1;
