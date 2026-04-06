@@ -3,6 +3,7 @@
     "rewrite": "/index.html",
     "exclude": [
       "/conquerers/*",
+      "/deadlock/*",
       "/parkplanner/*",
       "/SingersVoice/*",
       "/tripplanner/*",
@@ -37,6 +38,11 @@
     {
       "route": "/tripplanner",
       "redirect": "/tripplanner/",
+      "statusCode": 301
+    },
+    {
+      "route": "/deadlock",
+      "redirect": "/deadlock/",
       "statusCode": 301
     }
   ]
