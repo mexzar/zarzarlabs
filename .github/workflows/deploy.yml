@@ -38,7 +38,7 @@ jobs:
           cp -r tripplanner output/
           cp -r battlebots output/
           cp -r goatattack output/
-          cp -r deadlock output/
+          cp -r OttosVirtualAdventure output/
           cp -r parkplanner/dist output/parkplanner
 
       - name: Install SWA CLI and deploy
