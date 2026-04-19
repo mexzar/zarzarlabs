@@ -155,6 +155,216 @@ function drawWobbleCircle(x,y,r,fill,stroke='#222',lw=2){
 }
 
 // ============================================================
+// GOOFY OTTO DRAWING HELPER
+// ============================================================
+function drawGoofyOtto(cx, cy, facing, breathe, walkFrame, onGround, attacking, attackTimer, bScale, isTitle){
+  const bodyColor='#1a1a3e';
+  const outlineColor='#111';
+
+  // Body bob for bouncy walk
+  const bodyBob = onGround ? Math.abs(Math.sin(walkFrame * Math.PI / 2)) * 4 : 0;
+  const isWalking = onGround && walkFrame !== 0;
+
+  // Idle animation: occasional wink and tongue wiggle
+  const idleWink = (!isWalking && !attacking && Math.floor(frameCount / 80) % 5 === 0 && (frameCount % 80) < 12);
+  const tongueWiggle = Math.sin(frameCount * 0.12) * 3;
+
+  // Exaggerated leg swing for bouncy walk
+  const legOff = onGround ? Math.sin(walkFrame * Math.PI / 2) * 12 : 0;
+
+  // -- TAIL (behind body) --
+  ctx.strokeStyle = bodyColor; ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(-5, -12 - bodyBob);
+  const tailWag1 = Math.sin(frameCount * 0.1) * 12;
+  const tailWag2 = Math.cos(frameCount * 0.08) * 10;
+  ctx.bezierCurveTo(
+    -20 + tailWag1, -20 - bodyBob,
+    -10 + tailWag2, -42 - bodyBob,
+    -18 + Math.sin(frameCount * 0.12) * 14, -48 - bodyBob
+  );
+  ctx.stroke();
+  // Tail tip curl
+  ctx.beginPath();
+  ctx.arc(-18 + Math.sin(frameCount * 0.12) * 14, -48 - bodyBob, 3, 0, Math.PI * 2);
+  ctx.fillStyle = bodyColor; ctx.fill();
+
+  // -- LEGS with big cartoony feet --
+  ctx.fillStyle = bodyColor; ctx.strokeStyle = outlineColor; ctx.lineWidth = 2;
+  // Left leg
+  ctx.beginPath();
+  ctx.ellipse(-7, -4 + legOff - bodyBob, 5 * bScale, 16, 0, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+  // Right leg
+  ctx.beginPath();
+  ctx.ellipse(7, -4 - legOff - bodyBob, 5 * bScale, 16, 0, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+
+  // BIG cartoony feet (oversized!)
+  ctx.fillStyle = '#222';
+  ctx.beginPath(); ctx.ellipse(-7, 11 + legOff - bodyBob, 9, 5, -0.15, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(7, 11 - legOff - bodyBob, 9, 5, 0.15, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  // Toe bumps on feet
+  ctx.fillStyle = '#333';
+  ctx.beginPath(); ctx.arc(-11, 12 + legOff - bodyBob, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(-7, 13 + legOff - bodyBob, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(7, 13 - legOff - bodyBob, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(11, 12 - legOff - bodyBob, 2.5, 0, Math.PI * 2); ctx.fill();
+
+  // -- BODY TORSO (slightly smaller for big-head look) --
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.ellipse(0, -22 + breathe - bodyBob, 11 * bScale, 16 * bScale, 0, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+
+  // -- ARMS --
+  const armAngle = attacking ? ((-attackTimer / 15) * Math.PI * 0.8) : Math.sin(walkFrame * Math.PI / 2) * 0.5;
+  // Left arm
+  ctx.save();
+  ctx.translate(-11 * bScale, -26 - bodyBob);
+  ctx.rotate(-0.3 + armAngle);
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath(); ctx.ellipse(0, 8, 4 * bScale, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.restore();
+  // Right arm (attack arm)
+  ctx.save();
+  ctx.translate(11 * bScale, -26 - bodyBob);
+  ctx.rotate(attacking ? (-1.2 + armAngle) : 0.3 - armAngle);
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath(); ctx.ellipse(0, 8, 4 * bScale, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  // Claw
+  if (attacking) {
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath(); ctx.moveTo(i * 3, 16); ctx.lineTo(i * 5, 24); ctx.stroke();
+    }
+  }
+  ctx.restore();
+
+  // -- HEAD (bigger for cartoonish proportions!) --
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.ellipse(0, -44 + breathe - bodyBob, 14, 13, 0, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+
+  // -- EARS (one floppy!) --
+  // Left ear - normal pointy
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath(); ctx.moveTo(-9, -54 + breathe - bodyBob); ctx.lineTo(-14, -66 + breathe - bodyBob); ctx.lineTo(-4, -56 + breathe - bodyBob);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  // Inner left ear
+  ctx.fillStyle = '#3a3a6e';
+  ctx.beginPath(); ctx.moveTo(-8, -54 + breathe - bodyBob); ctx.lineTo(-12, -63 + breathe - bodyBob); ctx.lineTo(-5, -55 + breathe - bodyBob); ctx.closePath(); ctx.fill();
+
+  // Right ear - FLOPPY/BENT at goofy angle
+  ctx.fillStyle = bodyColor;
+  ctx.save();
+  ctx.translate(9, -54 + breathe - bodyBob);
+  ctx.rotate(0.5 + Math.sin(frameCount * 0.04) * 0.1); // floppy wobble
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(5, -10); ctx.lineTo(10, -4); ctx.lineTo(6, 2);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  // Inner right ear (floppy)
+  ctx.fillStyle = '#3a3a6e';
+  ctx.beginPath(); ctx.moveTo(1, -1); ctx.lineTo(5, -8); ctx.lineTo(8, -3); ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  // -- EYES (BIG and UNEVEN with googly pupils) --
+  const eyeY = -46 + breathe - bodyBob;
+  const pupilWobbleX = Math.sin(frameCount * 0.07) * 1.5;
+  const pupilWobbleY = Math.cos(frameCount * 0.09) * 1.0;
+
+  if (attacking) {
+    // Silly attack face: both eyes go WIDE
+    // Left eye (big)
+    ctx.fillStyle = '#7df';
+    ctx.beginPath(); ctx.ellipse(-5, eyeY, 6, 7, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = outlineColor; ctx.lineWidth = 1; ctx.stroke();
+    // Right eye (big)
+    ctx.beginPath(); ctx.ellipse(5, eyeY, 6, 7, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Tiny pupils (surprised)
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.ellipse(-5, eyeY, 1.5, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(5, eyeY, 1.5, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+  } else {
+    // Left eye - BIGGER
+    const leftEyeRX = 5.5, leftEyeRY = 6;
+    ctx.fillStyle = '#7df';
+    ctx.beginPath(); ctx.ellipse(-5, eyeY, leftEyeRX, leftEyeRY, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = outlineColor; ctx.lineWidth = 1; ctx.stroke();
+
+    // Right eye - smaller (uneven!)
+    const rightEyeRX = 4, rightEyeRY = 4.5;
+    ctx.beginPath(); ctx.ellipse(5, eyeY - 1, rightEyeRX, rightEyeRY, 0.1, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+    // Googly pupils that wobble
+    ctx.fillStyle = '#111';
+    // Check for idle wink
+    if (idleWink) {
+      // Left eye winks (closed line)
+      ctx.strokeStyle = '#111'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-9, eyeY); ctx.lineTo(-1, eyeY); ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.ellipse(-5 + pupilWobbleX, eyeY + pupilWobbleY, 2, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.beginPath(); ctx.ellipse(5 + pupilWobbleX * 0.8, eyeY - 1 + pupilWobbleY * 0.7, 1.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Eye shine spots
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-6.5 + pupilWobbleX * 0.3, eyeY - 2, 1.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(4 + pupilWobbleX * 0.3, eyeY - 2.5, 0.9, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // -- NOSE --
+  ctx.fillStyle = '#f7a';
+  ctx.beginPath(); ctx.ellipse(0, -40 + breathe - bodyBob, 2.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+
+  // -- GOOFY WIDE CROOKED SMILE --
+  const mouthY = -37 + breathe - bodyBob;
+  if (attacking) {
+    // Silly attack face: mouth closed tight (tongue goes in)
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-5, mouthY);
+    ctx.lineTo(5, mouthY - 1);
+    ctx.stroke();
+  } else {
+    // Wide crooked goofy grin
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-7, mouthY);
+    ctx.quadraticCurveTo(-2, mouthY + 6, 2, mouthY + 4);
+    ctx.quadraticCurveTo(5, mouthY + 2, 8, mouthY - 1);
+    ctx.stroke();
+
+    // -- TONGUE sticking out the side! --
+    const tongueX = 8 + Math.abs(tongueWiggle) * 0.3;
+    const tongueY2 = mouthY + tongueWiggle * 0.4 + Math.sin(frameCount * 0.15) * 1.5;
+    ctx.fillStyle = '#ff6b9d';
+    ctx.beginPath();
+    ctx.ellipse(tongueX, tongueY2 + 2, 4, 3 + Math.sin(frameCount * 0.1) * 0.5, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#d4456a'; ctx.lineWidth = 1; ctx.stroke();
+    // Tongue line
+    ctx.strokeStyle = '#d4456a'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(tongueX, tongueY2); ctx.lineTo(tongueX + 1, tongueY2 + 4); ctx.stroke();
+  }
+
+  // -- WHISKERS --
+  ctx.strokeStyle = '#888'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-6, -42 + breathe - bodyBob); ctx.lineTo(-20, -44 + breathe - bodyBob); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-6, -39 + breathe - bodyBob); ctx.lineTo(-19, -39 + breathe - bodyBob); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(6, -42 + breathe - bodyBob); ctx.lineTo(20, -44 + breathe - bodyBob); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(6, -39 + breathe - bodyBob); ctx.lineTo(19, -39 + breathe - bodyBob); ctx.stroke();
+
+  // Buffer muscles overlay
+  if (bufferLevel > 3 && !isTitle) {
+    ctx.fillStyle = 'rgba(40,40,80,0.3)';
+    ctx.beginPath(); ctx.ellipse(-8, -24 - bodyBob, 4 * bScale, 6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(8, -24 - bodyBob, 4 * bScale, 6, 0, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+// ============================================================
 // PLAYER OBJECT
 // ============================================================
 const player={
@@ -312,120 +522,15 @@ const player={
     const sy=this.y-camY;
     const f=this.facing;
     const bScale=1+bufferLevel*0.015;
-    const bw=this.w*bScale;
-    const bh=this.h*bScale;
     const cx=sx+this.w/2;
     const cy=sy+this.h;
+    const breathe=Math.sin(frameCount*0.08)*1.5;
 
     ctx.save();
     ctx.translate(cx,cy);
     ctx.scale(f,1);
 
-    const breathe=Math.sin(frameCount*0.08)*1.5;
-
-    // Body - bluish black
-    const bodyColor='#1a1a3e';
-    const outlineColor='#111';
-
-    // Legs
-    const legOff=this.onGround?Math.sin(this.walkFrame*Math.PI/2)*6:0;
-    // Left leg
-    ctx.fillStyle=bodyColor;ctx.strokeStyle=outlineColor;ctx.lineWidth=2;
-    ctx.beginPath();
-    ctx.ellipse(-6,-4+legOff,5*bScale,14,0,0,Math.PI*2);
-    ctx.fill();ctx.stroke();
-    // Right leg
-    ctx.beginPath();
-    ctx.ellipse(6,-4-legOff,5*bScale,14,0,0,Math.PI*2);
-    ctx.fill();ctx.stroke();
-    // Feet
-    ctx.fillStyle='#222';
-    ctx.beginPath();ctx.ellipse(-6,9+legOff,6,4,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-    ctx.beginPath();ctx.ellipse(6,9-legOff,6,4,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-
-    // Body torso
-    ctx.fillStyle=bodyColor;
-    ctx.beginPath();
-    ctx.ellipse(0,-22+breathe,12*bScale,18*bScale,0,0,Math.PI*2);
-    ctx.fill();ctx.stroke();
-
-    // Arms
-    const armAngle=this.attacking?((-this.attackTimer/15)*Math.PI*0.8):Math.sin(this.walkFrame*Math.PI/2)*0.3;
-    // Left arm
-    ctx.save();
-    ctx.translate(-12*bScale,-26);
-    ctx.rotate(-0.3+armAngle);
-    ctx.fillStyle=bodyColor;
-    ctx.beginPath();ctx.ellipse(0,8,4*bScale,10,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-    ctx.restore();
-    // Right arm (attack arm)
-    ctx.save();
-    ctx.translate(12*bScale,-26);
-    ctx.rotate(this.attacking?(-1.2+armAngle):0.3-armAngle);
-    ctx.fillStyle=bodyColor;
-    ctx.beginPath();ctx.ellipse(0,8,4*bScale,10,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-    // Claw
-    if(this.attacking){
-      ctx.strokeStyle='#fff';ctx.lineWidth=2;
-      for(let i=-1;i<=1;i++){
-        ctx.beginPath();ctx.moveTo(i*3,16);ctx.lineTo(i*5,24);ctx.stroke();
-      }
-    }
-    ctx.restore();
-
-    // Head
-    ctx.fillStyle=bodyColor;
-    ctx.beginPath();
-    ctx.ellipse(0,-42+breathe,11,10,0,0,Math.PI*2);
-    ctx.fill();ctx.stroke();
-
-    // Ears
-    ctx.beginPath();ctx.moveTo(-8,-50+breathe);ctx.lineTo(-12,-60+breathe);ctx.lineTo(-3,-52+breathe);
-    ctx.closePath();ctx.fill();ctx.stroke();
-    ctx.beginPath();ctx.moveTo(8,-50+breathe);ctx.lineTo(12,-60+breathe);ctx.lineTo(3,-52+breathe);
-    ctx.closePath();ctx.fill();ctx.stroke();
-    // Inner ears
-    ctx.fillStyle='#3a3a6e';
-    ctx.beginPath();ctx.moveTo(-7,-50+breathe);ctx.lineTo(-10,-57+breathe);ctx.lineTo(-4,-51+breathe);ctx.closePath();ctx.fill();
-    ctx.beginPath();ctx.moveTo(7,-50+breathe);ctx.lineTo(10,-57+breathe);ctx.lineTo(4,-51+breathe);ctx.closePath();ctx.fill();
-
-    // Eyes
-    ctx.fillStyle='#7df';
-    ctx.beginPath();ctx.ellipse(-4,-43+breathe,3,3.5,0,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.ellipse(4,-43+breathe,3,3.5,0,0,Math.PI*2);ctx.fill();
-    // Pupils
-    ctx.fillStyle='#111';
-    ctx.beginPath();ctx.ellipse(-4,-43+breathe,1.5,2,0,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.ellipse(4,-43+breathe,1.5,2,0,0,Math.PI*2);ctx.fill();
-
-    // Nose
-    ctx.fillStyle='#f7a';
-    ctx.beginPath();ctx.ellipse(0,-39+breathe,2,1.5,0,0,Math.PI*2);ctx.fill();
-
-    // Mouth
-    ctx.strokeStyle='#555';ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(-3,-37+breathe);ctx.quadraticCurveTo(0,-35+breathe,3,-37+breathe);ctx.stroke();
-
-    // Whiskers
-    ctx.strokeStyle='#888';ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(-5,-40+breathe);ctx.lineTo(-18,-42+breathe);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(-5,-38+breathe);ctx.lineTo(-17,-38+breathe);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(5,-40+breathe);ctx.lineTo(18,-42+breathe);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(5,-38+breathe);ctx.lineTo(17,-38+breathe);ctx.stroke();
-
-    // Tail
-    ctx.strokeStyle=bodyColor;ctx.lineWidth=4;
-    ctx.beginPath();
-    ctx.moveTo(-5,-12);
-    ctx.quadraticCurveTo(-20+Math.sin(frameCount*0.06)*5,-25,-15+Math.sin(frameCount*0.06)*8,-40);
-    ctx.stroke();
-
-    // Buffer muscles overlay
-    if(bufferLevel>3){
-      ctx.fillStyle='rgba(40,40,80,0.3)';
-      ctx.beginPath();ctx.ellipse(-8,-24,4*bScale,6,0,0,Math.PI*2);ctx.fill();
-      ctx.beginPath();ctx.ellipse(8,-24,4*bScale,6,0,0,Math.PI*2);ctx.fill();
-    }
+    drawGoofyOtto(cx, cy, f, breathe, this.walkFrame, this.onGround, this.attacking, this.attackTimer, bScale, false);
 
     ctx.restore();
   }
@@ -1842,31 +1947,13 @@ function drawTitle(){
   ctx.fillStyle='#ffa';ctx.font=`bold ${Math.min(60,W/12)}px monospace`;ctx.textAlign='center';
   ctx.fillText("Otto's Virtual Adventure",W/2,H/3);
 
-  // Draw Otto on title
+  // Draw GOOFY Otto on title
   ctx.save();
-  ctx.translate(W/2,H/2+20);
+  ctx.translate(W/2,H/2+30);
   const breathe=Math.sin(frameCount*0.08)*2;
-  ctx.fillStyle='#1a1a3e';ctx.strokeStyle='#111';ctx.lineWidth=2;
-  // Body
-  ctx.beginPath();ctx.ellipse(0,0+breathe,20,28,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-  // Head
-  ctx.beginPath();ctx.ellipse(0,-35+breathe,16,14,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-  // Ears
-  ctx.beginPath();ctx.moveTo(-10,-46+breathe);ctx.lineTo(-15,-60+breathe);ctx.lineTo(-5,-48+breathe);ctx.closePath();ctx.fill();ctx.stroke();
-  ctx.beginPath();ctx.moveTo(10,-46+breathe);ctx.lineTo(15,-60+breathe);ctx.lineTo(5,-48+breathe);ctx.closePath();ctx.fill();ctx.stroke();
-  // Eyes
-  ctx.fillStyle='#7df';
-  ctx.beginPath();ctx.ellipse(-5,-37+breathe,4,4,0,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.ellipse(5,-37+breathe,4,4,0,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='#111';
-  ctx.beginPath();ctx.ellipse(-5,-37+breathe,2,2.5,0,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.ellipse(5,-37+breathe,2,2.5,0,0,Math.PI*2);ctx.fill();
-  // Nose
-  ctx.fillStyle='#f7a';ctx.beginPath();ctx.ellipse(0,-32+breathe,2.5,2,0,0,Math.PI*2);ctx.fill();
-  // Legs
-  ctx.fillStyle='#1a1a3e';
-  ctx.beginPath();ctx.ellipse(-8,28,6,12,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-  ctx.beginPath();ctx.ellipse(8,28,6,12,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+
+  drawGoofyOtto(W/2, H/2+30, 1, breathe, 0, true, false, 0, 1.2, true);
+
   ctx.restore();
 
   ctx.fillStyle='#fff';ctx.font=`${Math.min(22,W/25)}px monospace`;
@@ -1954,6 +2041,7 @@ function update(){
 
   if(gameState==='title'){
     if(keys['Enter']||keys['NumpadEnter']){
+      keys['Enter']=false;keys['NumpadEnter']=false;
       ensureAudio();
       level=1;lives=3;hp=maxHp;score=0;
       startLevel(1);
@@ -2060,8 +2148,12 @@ function draw(){
 }
 
 function gameLoop(){
-  update();
-  draw();
+  try{
+    update();
+    draw();
+  }catch(err){
+    console.error('Game loop error:',err);
+  }
   requestAnimationFrame(gameLoop);
 }
 
