@@ -172,12 +172,6 @@
       // Start recording
       singRecordingPromise = VoiceRecorder.start(singMicStream, singTimer);
 
-      // Start lyrics auto-scroll if lyrics are present
-      if (LyricsManager.hasLyrics()) {
-        LyricsManager.loadFromInput();
-        LyricsManager.startAutoScroll(180); // Default 3 min scroll
-      }
-
       // Update UI
       singRecordBtn.disabled = true;
       singRecordBtn.classList.add('recording');
@@ -195,9 +189,6 @@
 
     // Stop pitch detection
     singPitchMonitor.stop();
-
-    // Stop lyrics scroll
-    LyricsManager.stopAutoScroll();
 
     // Update UI
     singRecordBtn.disabled = false;
@@ -217,9 +208,6 @@
     // Release mic
     VoiceRecorder.releaseStream();
     singMicStream = null;
-
-    // Reset lyrics
-    LyricsManager.reset();
   }
 
   // ===========================
