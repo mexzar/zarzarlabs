@@ -70,10 +70,20 @@ const SFX={
 // ============================================================
 const keys={};
 let mouseClick=false,mouseX=0,mouseY=0;
-window.addEventListener('keydown',e=>{keys[e.code]=true;e.preventDefault();});
-window.addEventListener('keyup',e=>{keys[e.code]=false;});
-window.addEventListener('mousedown',e=>{mouseClick=true;mouseX=e.clientX;mouseY=e.clientY;ensureAudio();});
-window.addEventListener('touchstart',e=>{mouseClick=true;ensureAudio();},{passive:true});
+let startPressed=false;
+window.addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  keys[e.key]=true;
+  if(e.key==='Enter'||e.code==='Enter'||e.code==='NumpadEnter')startPressed=true;
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();
+});
+window.addEventListener('keyup',e=>{keys[e.code]=false;keys[e.key]=false;});
+window.addEventListener('mousedown',e=>{mouseClick=true;mouseX=e.clientX;mouseY=e.clientY;ensureAudio();
+  if(gameState==='title'||gameState==='gameOver'||gameState==='victory')startPressed=true;
+});
+window.addEventListener('touchstart',e=>{mouseClick=true;ensureAudio();
+  if(gameState==='title'||gameState==='gameOver'||gameState==='victory')startPressed=true;
+},{passive:true});
 
 // ============================================================
 // GAME CONSTANTS
@@ -1957,7 +1967,7 @@ function drawTitle(){
   ctx.restore();
 
   ctx.fillStyle='#fff';ctx.font=`${Math.min(22,W/25)}px monospace`;
-  ctx.fillText('Press ENTER to Start',W/2,H*0.78);
+  ctx.fillText('Press ENTER or Click to Start',W/2,H*0.78);
   ctx.fillStyle='#aaa';ctx.font=`${Math.min(14,W/35)}px monospace`;
   ctx.fillText('Arrow Keys: Move/Jump | Mouse Click: Attack',W/2,H*0.85);
   ctx.fillText('Eat 20 pizzas to complete each level!',W/2,H*0.90);
@@ -1970,7 +1980,7 @@ function drawGameOver(){
   ctx.fillStyle='#fff';ctx.font=`${Math.min(24,W/22)}px monospace`;
   ctx.fillText(`Score: ${score}`,W/2,H/2);
   ctx.fillText(`Reached Level ${level}`,W/2,H/2+40);
-  ctx.fillText('Press ENTER to Retry',W/2,H*0.7);
+  ctx.fillText('Press ENTER or Click to Retry',W/2,H*0.7);
 }
 
 function drawVictory(){
@@ -1994,7 +2004,7 @@ function drawVictory(){
   ctx.fillStyle='#fff';ctx.font=`${Math.min(24,W/20)}px monospace`;
   ctx.fillText('Otto saved the day!',W/2,H/2);
   ctx.fillText(`Final Score: ${score}`,W/2,H/2+40);
-  ctx.fillText('Press ENTER to Play Again',W/2,H*0.75);
+  ctx.fillText('Press ENTER or Click to Play Again',W/2,H*0.75);
 }
 
 function drawLevelComplete(){
@@ -2040,8 +2050,8 @@ function update(){
   frameCount++;
 
   if(gameState==='title'){
-    if(keys['Enter']||keys['NumpadEnter']){
-      keys['Enter']=false;keys['NumpadEnter']=false;
+    if(startPressed){
+      startPressed=false;
       ensureAudio();
       level=1;lives=3;hp=maxHp;score=0;
       startLevel(1);
@@ -2050,9 +2060,9 @@ function update(){
   }
 
   if(gameState==='gameOver'||gameState==='victory'){
-    if(keys['Enter']||keys['NumpadEnter']){
+    if(startPressed){
+      startPressed=false;
       gameState='title';
-      keys['Enter']=false;keys['NumpadEnter']=false;
     }
     return;
   }
